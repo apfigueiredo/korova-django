@@ -54,3 +54,7 @@ docs/_build/
 
 # Astah backup files
 *.bak
+
+# PyCharm project directory
+.idea
+
