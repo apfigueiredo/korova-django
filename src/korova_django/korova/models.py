@@ -1,4 +1,6 @@
 from django.db import models
+from currencies import currencies
+from exceptions import KorovaError
 
 # Defining class Enum
 class EnumField(models.Field):
@@ -33,27 +35,53 @@ class Currency(models.Model):
 
 class Profile(models.Model):
     accounting_mode = EnumField(values=('LIFO','FIFO'))
-    default_currency =  models.ForeignKey(Currency)
+    default_currency = models.ForeignKey(Currency)
+
+    @classmethod
+    def create(cls, default_currency, accounting_mode):
+        instance = cls(default_currency=currencies[default_currency], accounting_mode=accounting_mode)
+        return instance
+
+    def add_book(self, book):
+        if book.profile is not None:
+            raise KorovaError('Book is already in a Profile')
+        book.profile = self
 
 
 class Book(models.Model):
     start = models.DateField()
     end = models.DateField()
-    profile = models.ForeignKey(Profile, related_name='books')
+    profile = models.ForeignKey(Profile, related_name='books', null=True)
+
+    def add_group(self, group):
+        if group.book is not None:
+            raise KorovaError('Group is already in a Book')
+        group.book = self
 
 
 class Group(models.Model):
     code = models.CharField(max_length=30)
     name = models.CharField(max_length=100)
-    book = models.ForeignKey(Book, related_name='groups')
+    book = models.ForeignKey(Book, related_name='groups', null=True)
     parent = models.ForeignKey('self', null=True, blank=True, related_name='children')
+
+    def add_subgroup(self, group):
+        if group.parent is not None:
+            raise KorovaError('Subgroup already has a parent')
+        group.parent = self
+
+    def add_account(self, account):
+        if account.group is not None:
+            raise KorovaError('Account is already in a Group')
+        account.group = self
+
 
 
 class Account(models.Model):
     code = models.CharField(max_length=30)
     name = models.CharField(max_length=100)
     balance = models.IntegerField()
-    group = models.ForeignKey(Group, related_name='accounts')
+    group = models.ForeignKey(Group, related_name='accounts', null=True)
     currency = models.ForeignKey(Currency)
     type = EnumField(values=(
                 'ASSET',
@@ -62,6 +90,11 @@ class Account(models.Model):
                 'EXPENSE',
                 'EQUITY'
             ))
+    def add_pocket(self, pocket):
+        if pocket.account is not None:
+            raise KorovaError('Pocket is already in a Balance')
+
+        pocket.account = self
 
 
 class Pocket(models.Model):
@@ -76,9 +109,28 @@ class Transaction(models.Model):
     description = models.CharField(max_length=500)
     date = models.DateTimeField()
 
+    @classmethod
+    def create(cls, date, description, t_debits, t_credits):
+        instance = cls(date=date, description=description)
+        tot_debits = reduce(lambda x, y : x.amount + y.amount, t_debits)
+        tot_credits = reduce(lambda x, y: x.amount + y.amount, t_credits)
+        if tot_debits != tot_credits:
+            raise KorovaError("Imbalanced Transaction")
+
+        for split in t_debits:
+            instance.add_split(split)
+
+        for split in t_credits:
+            instance.add_split(split)
+
+    def add_split(self, split):
+        if split.transaction is not None:
+            raise KorovaError("Split is already in a Transaction")
+        split.transaction = self
+
 
 class Split(models.Model):
     amount = models.IntegerField()
     account = models.ForeignKey(Account)
     type = EnumField(values=('DEBIT','CREDIT'))
-    transaction = models.ForeignKey(Transaction, related_name='splits')
+    transaction = models.ForeignKey(Transaction, related_name='splits', null=True)
