@@ -90,6 +90,22 @@ class Account(models.Model):
                 'EXPENSE',
                 'EQUITY'
             ))
+
+    @classmethod
+    def create(cls, code, name, profile, type, currency):
+        instance = cls(code=code, name=name, profile=profile, balance=0, type=type)
+        cur_obj = currencies[currency]
+        is_foreign = False
+        if profile.default_currency is not cur_obj:
+            is_foreign = True
+
+        if is_foreign and ( type == 'INCOME' or type == 'EXPENSE'):
+            raise KorovaError('A result account (INCOME | EXPENSE) cannot be in a foreign currency')
+
+        return instance
+
+
+
     def add_pocket(self, pocket):
         if pocket.account is not None:
             raise KorovaError('Pocket is already in a Balance')
