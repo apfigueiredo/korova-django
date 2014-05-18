@@ -1,5 +1,5 @@
 """
-Django settings for korova project.
+Django settings for main project.
 
 For more information on this file, see
 https://docs.djangoproject.com/en/1.6/topics/settings/
@@ -17,7 +17,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 # See https://docs.djangoproject.com/en/1.6/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'e2e3#=s5x4dt2_9-53ur24qu*t*g8%nvm*ehtn4xmry4n-neww'
+SECRET_KEY = 'zj0)loca=%rczcek)_q&-qp5!^u*4+6o@7j1aw$x-zrin+57-#'
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -47,9 +47,9 @@ MIDDLEWARE_CLASSES = (
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 )
 
-ROOT_URLCONF = 'korova.urls'
+ROOT_URLCONF = 'main.urls'
 
-WSGI_APPLICATION = 'korova.wsgi.application'
+WSGI_APPLICATION = 'main.wsgi.application'
 
 
 # Database
