@@ -114,9 +114,10 @@ class Account(models.Model):
 
 
 class Pocket(models.Model):
-    amount = models.IntegerField()
-    source_value = models.IntegerField()
-    target_value = models.IntegerField()
+    foreign_amount = models.IntegerField()   # Creation amount in the account's currency
+    local_amount = models.IntegerField()     # Creation amount in the profile's currency
+    foreign_balance = models.IntegerField()  # Current balance in the account's currency
+    local_balance = models.IntegerField()    # Current balance in the profile's currency
     date = models.DateTimeField()
     account = models.ForeignKey(Account, related_name='pockets')
 
@@ -126,17 +127,42 @@ class Transaction(models.Model):
     date = models.DateTimeField()
 
     @classmethod
-    def create(cls, date, description, t_debits, t_credits):
+    def _add_split_amount_to_amount_dict(cls, split, amount_dict):
+        cur = split.account.currency
+        try:
+            amount_dict[cur] += split.amount
+        except KeyError:
+            amount_dict[cur] = split.amount
+
+    @classmethod
+    def _add_split_amount_to_account_dict(cls, split, account_dict):
+        acc = split.account
+        try:
+            account_dict[acc] += split.amount
+        except KeyError:
+            account_dict[acc] = split.amount
+
+    @classmethod
+    def create(cls, date, description, profile, t_debits, t_credits):
+        credit_amounts = {}
+        debit_amounts = {}
+        credit_accounts = {}
+        debit_accounts = {}
         instance = cls(date=date, description=description)
         tot_debits = reduce(lambda x, y : x.amount + y.amount, t_debits)
         tot_credits = reduce(lambda x, y: x.amount + y.amount, t_credits)
         if tot_debits != tot_credits:
             raise KorovaError("Imbalanced Transaction")
 
+        # process debits
         for split in t_debits:
+            Transaction._add_split_amount_to_account_dict(split, debit_accounts)
+            Transaction._add_split_amount_to_amount_dict(split, debit_amounts)
             instance.add_split(split)
 
         for split in t_credits:
+            Transaction._add_split_amount_to_account_dict(split, credit_accounts)
+            Transaction._add_split_amount_to_amount_dict(split, credit_amounts)
             instance.add_split(split)
 
     def add_split(self, split):
