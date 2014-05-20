@@ -80,7 +80,7 @@ class Group(models.Model):
 class Account(models.Model):
     code = models.CharField(max_length=30)
     name = models.CharField(max_length=100)
-    balance = models.IntegerField()
+    balance = models.DecimalField()
     group = models.ForeignKey(Group, related_name='accounts', null=True)
     currency = models.ForeignKey(Currency)
     type = EnumField(values=(
@@ -114,17 +114,18 @@ class Account(models.Model):
 
 
 class Pocket(models.Model):
-    foreign_amount = models.IntegerField()   # Creation amount in the account's currency
-    local_amount = models.IntegerField()     # Creation amount in the profile's currency
-    foreign_balance = models.IntegerField()  # Current balance in the account's currency
-    local_balance = models.IntegerField()    # Current balance in the profile's currency
+    foreign_amount = models.DecimalField()   # Creation amount in the account's currency
+    local_amount = models.DecimalField()     # Creation amount in the profile's currency
+    foreign_balance = models.DecimalField()  # Current balance in the account's currency
+    local_balance = models.DecimalField()    # Current balance in the profile's currency
     date = models.DateTimeField()
     account = models.ForeignKey(Account, related_name='pockets')
 
 
 class Transaction(models.Model):
     description = models.CharField(max_length=500)
-    date = models.DateTimeField()
+    creation_date = models.DateTimeField()
+    transaction_date = models.DateTimeField()
 
     @classmethod
     def _add_split_amount_to_amount_dict(cls, split, amount_dict):
@@ -149,7 +150,7 @@ class Transaction(models.Model):
         credit_accounts = {}
         debit_accounts = {}
         instance = cls(date=date, description=description)
-        tot_debits = reduce(lambda x, y : x.amount + y.amount, t_debits)
+        tot_debits = reduce(lambda x, y: x.amount + y.amount, t_debits)
         tot_credits = reduce(lambda x, y: x.amount + y.amount, t_credits)
         if tot_debits != tot_credits:
             raise KorovaError("Imbalanced Transaction")
@@ -172,7 +173,7 @@ class Transaction(models.Model):
 
 
 class Split(models.Model):
-    amount = models.IntegerField()
+    amount = models.DecimalField()
     account = models.ForeignKey(Account)
     type = EnumField(values=('DEBIT','CREDIT'))
     transaction = models.ForeignKey(Transaction, related_name='splits', null=True)
