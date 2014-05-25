@@ -171,9 +171,14 @@ class Transaction(models.Model):
             raise KorovaError("Split is already in a Transaction")
         split.transaction = self
 
+class PocketOperation(models.Model):
+    type = EnumField(values=('CREATE', 'INCREASE', 'DECREASE'))
+    pocket = models.ForeignKey(Pocket)
 
 class Split(models.Model):
     amount = models.DecimalField()
     account = models.ForeignKey(Account)
     type = EnumField(values=('DEBIT','CREDIT'))
+    date = models.DateTimeField()
     transaction = models.ForeignKey(Transaction, related_name='splits', null=True)
+    operation = models.ForeignKey(PocketOperation)
