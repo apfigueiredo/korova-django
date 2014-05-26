@@ -44,11 +44,6 @@ class Profile(models.Model):
         instance = cls(default_currency=currencies[default_currency], accounting_mode=accounting_mode)
         return instance
 
-    def add_book(self, book):
-        if book.profile is not None:
-            raise KorovaError('Book is already in a Profile')
-        book.profile = self
-
 
 class Book(models.Model):
     start = models.DateField()
@@ -66,17 +61,6 @@ class Group(models.Model):
     name = models.CharField(max_length=100)
     book = models.ForeignKey(Book, related_name='groups', null=True)
     parent = models.ForeignKey('self', null=True, blank=True, related_name='children')
-
-    def add_subgroup(self, group):
-        if group.parent is not None:
-            raise KorovaError('Subgroup already has a parent')
-        group.parent = self
-
-    def add_account(self, account):
-        if account.group is not None:
-            raise KorovaError('Account is already in a Group')
-        account.group = self
-
 
 
 class Account(models.Model):
@@ -179,4 +163,3 @@ class Split(models.Model):
     type = EnumField(values=('DEBIT','CREDIT'))
     date = models.DateTimeField()
     transaction = models.ForeignKey(Transaction, related_name='splits', null=True)
-    operation = models.ForeignKey(PocketOperation)
