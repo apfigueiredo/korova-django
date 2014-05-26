@@ -36,7 +36,7 @@ class Currency(models.Model):
 
 
 class Profile(models.Model):
-    accounting_mode = EnumField(values=('LIFO','FIFO'))
+    accounting_mode = EnumField(values=('LIFO','FIFO'))  # for now, FIFO is assumed
     default_currency = models.ForeignKey(Currency)
 
     @classmethod
@@ -106,17 +106,13 @@ class Account(models.Model):
 
         return instance
 
-
-
-    def add_pocket(self, pocket):
-        if pocket.account is not None:
-            raise KorovaError('Pocket is already in a Balance')
-
-        pocket.account = self
-
-    #def find_available_pocket(self):
-    #    self.pockets
-
+    # Find enough pockets to cover the requested amount
+    def find_available_pocket(self, amount):
+        available_pockets = []
+        try:
+            return self.pockets.filter(local_balance__gt=0).order_by('date')[0]
+        except IndexError:
+            return None
 
 class Pocket(models.Model):
     foreign_amount = models.DecimalField(max_digits=18, decimal_places=6)   # Creation amount in the account's currency
@@ -171,15 +167,10 @@ class Transaction(models.Model):
             Transaction._add_split_amount_to_amount_dict(split, credit_amounts)
             instance.add_split(split)
 
-    def add_split(self, split):
-        if split.transaction is not None:
-            raise KorovaError("Split is already in a Transaction")
-        split.transaction = self
-
 
 class PocketOperation(models.Model):
     type = EnumField(values=('CREATE', 'INCREASE', 'DECREASE'))
-    pocket = models.ForeignKey(Pocket)
+    pocket = models.ForeignKey(Pocket,related_name='pocketOperations')
 
 
 class Split(models.Model):
