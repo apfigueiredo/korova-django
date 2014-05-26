@@ -151,6 +151,11 @@ class Transaction(models.Model):
             Transaction._add_split_amount_to_amount_dict(split, credit_amounts)
             instance.add_split(split)
 
+    def add_split(self, split):
+        if split.transaction is not None:
+            raise KorovaError("Split is already in a Transaction")
+        split.transaction = self
+
 
 class PocketOperation(models.Model):
     type = EnumField(values=('CREATE', 'INCREASE', 'DECREASE'))
@@ -159,7 +164,7 @@ class PocketOperation(models.Model):
 
 class Split(models.Model):
     amount = models.DecimalField(max_digits=18, decimal_places=6)
-    account = models.ForeignKey(Account)
+    account = models.ForeignKey(Account, null=True)
     type = EnumField(values=('DEBIT','CREDIT'))
     date = models.DateTimeField()
     transaction = models.ForeignKey(Transaction, related_name='splits', null=True)
