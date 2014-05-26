@@ -1,11 +1,12 @@
 __author__ = 'aloysio'
 
 from django.db.utils import ProgrammingError
-from models import Currency
+
 
 currencies = {}
 
 def initialize_currencies(sender=None, **kwargs):
+    from models import Currency
     global currencies
     currencies['BRL'] = Currency.objects.get_or_create(code="BRL", name="Brazilian Real", fraction=100)[0]
     currencies['USD'] = Currency.objects.get_or_create(code="USD", name="American Dollar", fraction=100)[0]

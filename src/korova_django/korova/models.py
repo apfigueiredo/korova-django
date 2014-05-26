@@ -1,6 +1,8 @@
 from django.db import models
 from currencies import currencies
+#import korova.currencies
 from exceptions import KorovaError
+
 
 # Defining class Enum
 class EnumField(models.Field):
@@ -80,7 +82,7 @@ class Group(models.Model):
 class Account(models.Model):
     code = models.CharField(max_length=30)
     name = models.CharField(max_length=100)
-    balance = models.DecimalField()
+    balance = models.DecimalField(max_digits=18, decimal_places=6)
     group = models.ForeignKey(Group, related_name='accounts', null=True)
     currency = models.ForeignKey(Currency)
     type = EnumField(values=(
@@ -112,12 +114,15 @@ class Account(models.Model):
 
         pocket.account = self
 
+    #def find_available_pocket(self):
+    #    self.pockets
+
 
 class Pocket(models.Model):
-    foreign_amount = models.DecimalField()   # Creation amount in the account's currency
-    local_amount = models.DecimalField()     # Creation amount in the profile's currency
-    foreign_balance = models.DecimalField()  # Current balance in the account's currency
-    local_balance = models.DecimalField()    # Current balance in the profile's currency
+    foreign_amount = models.DecimalField(max_digits=18, decimal_places=6)   # Creation amount in the account's currency
+    local_amount = models.DecimalField(max_digits=18, decimal_places=6)     # Creation amount in the profile's currency
+    foreign_balance = models.DecimalField(max_digits=18, decimal_places=6)  # Current balance in the account's currency
+    local_balance = models.DecimalField(max_digits=18, decimal_places=6)    # Current balance in the profile's currency
     date = models.DateTimeField()
     account = models.ForeignKey(Account, related_name='pockets')
 
@@ -171,12 +176,14 @@ class Transaction(models.Model):
             raise KorovaError("Split is already in a Transaction")
         split.transaction = self
 
+
 class PocketOperation(models.Model):
     type = EnumField(values=('CREATE', 'INCREASE', 'DECREASE'))
     pocket = models.ForeignKey(Pocket)
 
+
 class Split(models.Model):
-    amount = models.DecimalField()
+    amount = models.DecimalField(max_digits=18, decimal_places=6)
     account = models.ForeignKey(Account)
     type = EnumField(values=('DEBIT','CREDIT'))
     date = models.DateTimeField()
