@@ -1,4 +1,4 @@
 #!/bin/bash
-mysql -u root -p < clean.sql
-python manage.py syncdb
+mysql -u root -p8jkl56 < clean.sql
+python manage.py syncdb --noinput
 

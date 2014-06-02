@@ -1,7 +1,7 @@
 from django.db import models
 from currencies import currencies
-#import korova.currencies
 from exceptions import KorovaError
+from decimal import Decimal
 
 
 # Defining class Enum
@@ -40,27 +40,35 @@ class Profile(models.Model):
     default_currency = models.ForeignKey(Currency)
 
     @classmethod
-    def create(cls, default_currency, accounting_mode):
-        instance = cls(default_currency=currencies[default_currency], accounting_mode=accounting_mode)
-        return instance
+    def create(cls, default_currency, accounting_mode='FIFO'):
+        return cls.objects.create(default_currency=default_currency,accounting_mode=accounting_mode)
+
+    def create_book(self, start, end=None):
+        return Book.objects.create(start=start, end=end, profile=self)
 
 
 class Book(models.Model):
     start = models.DateField()
-    end = models.DateField()
-    profile = models.ForeignKey(Profile, related_name='books', null=True)
+    end = models.DateField(null=True)
+    profile = models.ForeignKey(Profile, related_name='books')
 
-    def add_group(self, group):
-        if group.book is not None:
-            raise KorovaError('Group is already in a Book')
-        group.book = self
+    def create_top_level_group(self, name, code):
+        return Group.objects.create(code=code, name=name, book=self, parent=None)
 
 
 class Group(models.Model):
     code = models.CharField(max_length=30)
     name = models.CharField(max_length=100)
-    book = models.ForeignKey(Book, related_name='groups', null=True)
+    book = models.ForeignKey(Book, related_name='groups')
     parent = models.ForeignKey('self', null=True, blank=True, related_name='children')
+
+    def create_child(self, name, code):
+        return Group.objects.create(code=code, name=name, book=self.book, parent=self)
+
+    def create_account(self, code, name, currency, account_type):
+        acc = Account.create(code=code, name=name, profile=self.book.profile, currency=currency, account_type=account_type)
+        acc.group = self
+        acc.save()
 
 
 class Account(models.Model):
@@ -77,17 +85,23 @@ class Account(models.Model):
                 'EQUITY'
             ))
 
+    def is_foreign(self):
+        return self.profile.default_currency is not self.currency
+
     @classmethod
     def create(cls, code, name, profile, account_type, currency):
-        instance = cls(code=code, name=name, profile=profile, balance=0, account_type=account_type)
-        cur_obj = currencies[currency]
-        is_foreign = False
-        if profile.default_currency is not cur_obj:
-            is_foreign = True
+        instance = cls()
+        instance.code=code
+        instance.name=name
+        instance.profile=profile
+        instance.balance=Decimal(0)
+        instance.account_type=account_type
+        instance.currency=currency
 
-        if is_foreign and ( account_type == 'INCOME' or account_type == 'EXPENSE'):
+        if instance.is_foreign() and ( account_type == 'INCOME' or account_type == 'EXPENSE'):
             raise KorovaError('A result account (INCOME | EXPENSE) cannot be in a foreign currency')
 
+        instance.save()
         return instance
 
     # Find enough pockets to cover the requested amount, if possible
@@ -95,7 +109,7 @@ class Account(models.Model):
     #   covered_amount, pocket_info = account.find_available_pockets(amount)
     #   pocket_info is a tuple of (pocket_amount, pocket), where pocket_amount is the
     #   amount to be deduced from pocket
-    def find_available_pocket(self, amount):
+    def find_available_pockets(self, amount):
         amount_to_cover = amount
         ret_pockets = []
         available_pockets = self.pockets.filter(local_balance__gt=0).order_by('date')
@@ -109,6 +123,11 @@ class Account(models.Model):
                 ret_pockets.append((pocket, pocket.foreign_amount))
 
         return amount_to_cover, ret_pockets
+
+    def create_pocket(self, amount, local_amount):
+        pkt = Pocket()
+        
+
 
 class Pocket(models.Model):
     foreign_amount = models.DecimalField(max_digits=18, decimal_places=6)   # Creation amount in the account's currency
@@ -125,63 +144,33 @@ class Transaction(models.Model):
     transaction_date = models.DateTimeField()
 
     @classmethod
-    def _add_split_amount_to_amount_dict(cls, split, amount_dict):
-        cur = split.account.currency
-        try:
-            amount_dict[cur] += split.amount
-        except KeyError:
-            amount_dict[cur] = split.amount
-
-    @classmethod
-    def _add_split_amount_to_account_dict(cls, split, account_dict):
-        acc = split.account
-        try:
-            account_dict[acc] += split.amount
-        except KeyError:
-            account_dict[acc] = split.amount
-
-    @classmethod
     def create(cls, date, description, profile, t_debits, t_credits):
-        credit_amounts = {}
-        debit_amounts = {}
-        credit_accounts = {}
-        debit_accounts = {}
         instance = cls(date=date, description=description)
         tot_debits = reduce(lambda x, y: x.amount + y.amount, t_debits)
         tot_credits = reduce(lambda x, y: x.amount + y.amount, t_credits)
         if tot_debits != tot_credits:
             raise KorovaError("Imbalanced Transaction")
 
-        # process debits
-        for split in t_debits:
-            Transaction._add_split_amount_to_account_dict(split, debit_accounts)
-            Transaction._add_split_amount_to_amount_dict(split, debit_amounts)
-            instance.add_split(split)
-
-        for split in t_credits:
-            Transaction._add_split_amount_to_account_dict(split, credit_accounts)
-            Transaction._add_split_amount_to_amount_dict(split, credit_amounts)
+        for split in t_debits + t_credits:
             instance.add_split(split)
 
     def add_split(self, split):
         if split.transaction is not None:
             raise KorovaError("Split is already in a Transaction")
         split.transaction = self
+        split.link()
 
 
-class PocketOperation(models.Model):
-    operation_type = EnumField(values=('CREATE', 'DECREASE'))
-    pocket = models.ForeignKey(Pocket)
-    split = models.ForeignKey(Split, related_name='pocketOperations')
 
 
 class Split(models.Model):
     amount = models.DecimalField(max_digits=18, decimal_places=6)
+    local_amount = models.DecimalField(max_digits=18,decimal_places=6)
     account = models.ForeignKey(Account, null=True)
     split_type = EnumField(values=('DEBIT', 'CREDIT'))
+    is_linked = models.BooleanField()
     date = models.DateTimeField()
     transaction = models.ForeignKey(Transaction, related_name='splits', null=True)
-    is_linked = False
 
     @classmethod
     def create(cls, amount, account, split_type, date):
@@ -190,10 +179,12 @@ class Split(models.Model):
         instance.account = account
         instance.split_type = split_type
         instance.date = date
+        instance.is_linked = False
+        instance.local_amount = Decimal(0)
 
     def link(self):
         operation = None
-        local_currency_cost = 0
+        local_currency_cost = Decimal(0)
 
         # First, deduce if we have to increase or decrease the account balance
         if self.split_type == 'DEBIT':
@@ -207,7 +198,6 @@ class Split(models.Model):
             else:
                 operation = 'CREATE'
 
-
         if operation == 'CREATE':
             po = PocketOperation()
             po.operation_type = 'CREATE'
@@ -220,6 +210,7 @@ class Split(models.Model):
 
             po.pocket = p
             po.split = self
+
         else: ## 'DECREASE'
             covered_amount, pocket_info = self.account.find_available_pocket(self.amount)
 
@@ -236,4 +227,11 @@ class Split(models.Model):
             if covered_amount < self.amount:
                 self.account.imbalance = self.amount - covered_amount
 
-        return local_currency_cost
+        self.local_amount = local_currency_cost
+        self.is_linked = True
+
+
+class PocketOperation(models.Model):
+    operation_type = EnumField(values=('CREATE', 'DECREASE'))
+    pocket = models.ForeignKey(Pocket)
+    split = models.ForeignKey(Split, related_name='pocketOperations')
