@@ -1,4 +1,4 @@
 @echo off
-mysql -u root -p < limpa.sql
-python manage.py syncdb
+mysql -u root -p8jkl56 < clean.sql
+python manage.py syncdb --noinput
 
