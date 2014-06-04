@@ -111,19 +111,21 @@ class KorovaModelTests(TestCase):
 
     def test_deduct_amount_in_foreign_account_with_random_increases_and_decreases(self):
         acc = self.group.create_account('T01', 'test account', usd, 'ASSET')
-        decimal.getcontext().prec = 6
 
         total_foreign = DECIMAL_ZERO
-        for i in range(10):
-            r = random.uniform(100, 200)
-            total_foreign += Decimal(r)
-            acc.increase_amount(r, timezone.now(), random.uniform(200,500))
+        for i in range(50):
+            r = Decimal(random.uniform(10, 20)).quantize(QUANTA)
+            #r = Decimal(random.uniform(100, 200))
+            total_foreign += r
+            acc.increase_amount(r, timezone.now(), Decimal(random.uniform(20,50)).quantize(QUANTA))
+            #acc.increase_amount(r, timezone.now(), Decimal(random.uniform(200,500)))
 
         fb,dummy = acc.get_balances()
         self.assertEqual(fb, total_foreign)
 
         while True:
-            r = Decimal(random.uniform(10, 100))
+            r = Decimal(random.uniform(5, 10)).quantize(QUANTA)
+            #r = Decimal(random.uniform(10, 100))
             ded = min(fb,r)
             foreign, local = acc.get_balances()
             print fb, foreign
@@ -132,9 +134,6 @@ class KorovaModelTests(TestCase):
 
             if fb <= 0:
                 break
-
-
-
 
         foreign, local = acc.get_balances()
         print fb, foreign

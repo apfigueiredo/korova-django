@@ -1,12 +1,11 @@
 from django.db import models
 from currencies import currencies
 from exceptions import KorovaError
-from decimal import Decimal, Context
+from decimal import Decimal, Context, getcontext
 from django.utils import timezone
 
-
-context = Context(prec=6)
-DECIMAL_ZERO = Decimal(0, context)
+DECIMAL_ZERO = Decimal(0)
+QUANTA = Decimal(10) ** (-6)
 
 # Defining class Enum
 class EnumField(models.Field):
@@ -151,6 +150,9 @@ class Account(models.Model):
         if not local_amount:
             local_amount = amount
 
+        local_amount = Decimal(local_amount).quantize(QUANTA)
+        amount = Decimal(amount).quantize(QUANTA)
+
         if self.is_local() and local_amount != amount:
             raise KorovaError('Different amounts in local account')
 
@@ -158,25 +160,28 @@ class Account(models.Model):
 
     def deduct_amount(self, amount):
         available_pockets = self.pockets.filter(foreign_balance__gt=0).order_by('date')
-        amount_to_cover = amount
+        amount_to_cover = Decimal(amount).quantize(QUANTA)
         local_currency_cost = DECIMAL_ZERO
+        print "AVP : " + str(len(available_pockets))
 
         for pocket in available_pockets:
 
-            if pocket.foreign_amount > amount_to_cover:
-                local_amount = (pocket.local_amount*amount_to_cover)/pocket.foreign_amount
+            if pocket.foreign_balance > amount_to_cover:
+                #print 'X %s %s' % (unicode(pocket.foreign_amount), unicode(amount_to_cover))
+                local_amount = ((pocket.local_amount*amount_to_cover)/pocket.foreign_amount).quantize(QUANTA)
                 local_currency_cost += local_amount
                 pocket.foreign_balance -= amount_to_cover
                 pocket.local_balance -= local_amount
                 if pocket.foreign_balance == DECIMAL_ZERO:
+                    #print 'a ' + unicode(pocket)
                     pocket.delete()
                 else:
+                    #print 'b '+ unicode(pocket)
                     pocket.save()
                 amount_to_cover = DECIMAL_ZERO
-
-
                 break
             else:
+                #print 'c '+ unicode(pocket)
                 amount_to_cover -= pocket.foreign_balance
                 local_currency_cost += pocket.local_balance
                 #pocket.foreign_balance = DECIMAL_ZERO
