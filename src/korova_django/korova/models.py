@@ -69,6 +69,7 @@ class Group(models.Model):
         acc = Account.create(code=code, name=name, profile=self.book.profile, currency=currency, account_type=account_type)
         acc.group = self
         acc.save()
+        return acc
 
 
 class Account(models.Model):
@@ -124,10 +125,17 @@ class Account(models.Model):
 
         return amount_to_cover, ret_pockets
 
-    def create_pocket(self, amount, local_amount):
+    def create_pocket(self, amount, local_amount, date):
         pkt = Pocket()
+        pkt.foreign_amount = amount
+        pkt.local_amount = local_amount
+        pkt.foreign_balance = amount
+        pkt.local_balance = local_amount
+        pkt.date = date
+        pkt.account = self
+        pkt.save()
+        return pkt
         
-
 
 class Pocket(models.Model):
     foreign_amount = models.DecimalField(max_digits=18, decimal_places=6)   # Creation amount in the account's currency

@@ -2,6 +2,7 @@ from django.test import TestCase
 from korova.models import *
 from korova.currencies import *
 from datetime import datetime
+from django.utils import timezone
 
 brl = currencies['BRL']
 
@@ -41,4 +42,12 @@ class KorovaModelTests(TestCase):
         top_level = book.create_top_level_group(name='Assets', code='1')
         top_level.create_account('1.1.01', 'Conta Bradesco', brl, 'ASSET')
         self.assertTrue(top_level.accounts)
+
+    def test_create_pocket(self):
+        p = Profile.create(brl)
+        book = p.create_book(start=datetime.now())
+        top_level = book.create_top_level_group(name='Assets', code='1')
+        acc = top_level.create_account('1.1.01', 'Conta Bradesco', brl, 'ASSET')
+        acc.create_pocket(Decimal(10), Decimal(10), timezone.now())
+        self.assertTrue(acc.pockets)
 
