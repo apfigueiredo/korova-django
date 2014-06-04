@@ -1,8 +1,12 @@
 from django.db import models
 from currencies import currencies
 from exceptions import KorovaError
-from decimal import Decimal
+from decimal import Decimal, Context
+from django.utils import timezone
 
+
+context = Context(prec=6)
+DECIMAL_ZERO = Decimal(0, context)
 
 # Defining class Enum
 class EnumField(models.Field):
@@ -30,18 +34,22 @@ class EnumField(models.Field):
 
 
 class Currency(models.Model):
-    code = models.CharField(max_length=3)
+    code = models.CharField(max_length=3, unique=True)
     name = models.CharField(max_length=50)
     fraction = models.IntegerField()
+
+    def __cmp__(self, other):
+        return cmp(self.code, other.code)
 
 
 class Profile(models.Model):
     accounting_mode = EnumField(values=('LIFO','FIFO'))  # for now, FIFO is assumed
     default_currency = models.ForeignKey(Currency)
+    name = models.CharField(max_length=300)
 
     @classmethod
-    def create(cls, default_currency, accounting_mode='FIFO'):
-        return cls.objects.create(default_currency=default_currency,accounting_mode=accounting_mode)
+    def create(cls, default_currency, name, accounting_mode='FIFO'):
+        return cls.objects.create(default_currency=default_currency,accounting_mode=accounting_mode, name=name)
 
     def create_book(self, start, end=None):
         return Book.objects.create(start=start, end=end, profile=self)
@@ -57,7 +65,7 @@ class Book(models.Model):
 
 
 class Group(models.Model):
-    code = models.CharField(max_length=30)
+    code = models.CharField(max_length=30, unique=True)
     name = models.CharField(max_length=100)
     book = models.ForeignKey(Book, related_name='groups')
     parent = models.ForeignKey('self', null=True, blank=True, related_name='children')
@@ -73,9 +81,9 @@ class Group(models.Model):
 
 
 class Account(models.Model):
-    code = models.CharField(max_length=30)
+    code = models.CharField(max_length=30, unique=True)
     name = models.CharField(max_length=100)
-    balance = models.DecimalField(max_digits=18, decimal_places=6)
+    imbalance = models.DecimalField(max_digits=18, decimal_places=6)
     group = models.ForeignKey(Group, related_name='accounts', null=True)
     currency = models.ForeignKey(Currency)
     account_type = EnumField(values=(
@@ -87,7 +95,10 @@ class Account(models.Model):
             ))
 
     def is_foreign(self):
-        return self.profile.default_currency is not self.currency
+        return self.profile.default_currency != self.currency
+
+    def is_local(self):
+        return self.profile.default_currency == self.currency
 
     @classmethod
     def create(cls, code, name, profile, account_type, currency):
@@ -95,7 +106,7 @@ class Account(models.Model):
         instance.code=code
         instance.name=name
         instance.profile=profile
-        instance.balance=Decimal(0)
+        instance.imbalance=DECIMAL_ZERO
         instance.account_type=account_type
         instance.currency=currency
 
@@ -135,7 +146,62 @@ class Account(models.Model):
         pkt.account = self
         pkt.save()
         return pkt
-        
+
+    def increase_amount(self, amount, date=timezone.now(), local_amount=None):
+        if not local_amount:
+            local_amount = amount
+
+        if self.is_local() and local_amount != amount:
+            raise KorovaError('Different amounts in local account')
+
+        return self.create_pocket(amount, local_amount, date)
+
+    def deduct_amount(self, amount):
+        available_pockets = self.pockets.filter(foreign_balance__gt=0).order_by('date')
+        amount_to_cover = amount
+        local_currency_cost = DECIMAL_ZERO
+
+        for pocket in available_pockets:
+
+            if pocket.foreign_amount > amount_to_cover:
+                local_amount = (pocket.local_amount*amount_to_cover)/pocket.foreign_amount
+                local_currency_cost += local_amount
+                pocket.foreign_balance -= amount_to_cover
+                pocket.local_balance -= local_amount
+                if pocket.foreign_balance == DECIMAL_ZERO:
+                    pocket.delete()
+                else:
+                    pocket.save()
+                amount_to_cover = DECIMAL_ZERO
+
+
+                break
+            else:
+                amount_to_cover -= pocket.foreign_balance
+                local_currency_cost += pocket.local_balance
+                #pocket.foreign_balance = DECIMAL_ZERO
+                #pocket.local_balance = DECIMAL_ZERO
+                #pocket.save()
+                pocket.delete()
+
+
+        if amount_to_cover > DECIMAL_ZERO:
+            # could not cover all the requested amount, imbalance
+            self.imbalance = amount_to_cover
+            self.save()
+
+        return local_currency_cost
+
+    def get_balances(self):
+        my_pockets = self.pockets.filter(foreign_balance__gt=0)
+        local_balance = DECIMAL_ZERO
+        foreign_balance = DECIMAL_ZERO
+        for pocket in my_pockets:
+            local_balance += pocket.local_balance
+            foreign_balance += pocket.foreign_balance
+
+        return  foreign_balance, local_balance
+
 
 class Pocket(models.Model):
     foreign_amount = models.DecimalField(max_digits=18, decimal_places=6)   # Creation amount in the account's currency
@@ -144,6 +210,12 @@ class Pocket(models.Model):
     local_balance = models.DecimalField(max_digits=18, decimal_places=6)    # Current balance in the profile's currency
     date = models.DateTimeField()
     account = models.ForeignKey(Account, related_name='pockets')
+
+    def __unicode__(self):
+        return u'Pocket(f_amt=%s,l_amt=%s,f_bal=%s,l_bal=%s,date=%s)' % (
+            self.foreign_amount, self.local_amount, self.foreign_balance,
+            self.local_balance, self.date
+        )
 
 
 class Transaction(models.Model):
@@ -188,11 +260,11 @@ class Split(models.Model):
         instance.split_type = split_type
         instance.date = date
         instance.is_linked = False
-        instance.local_amount = Decimal(0)
+        instance.local_amount = DECIMAL_ZERO
 
     def link(self):
         operation = None
-        local_currency_cost = Decimal(0)
+        local_currency_cost = DECIMAL_ZERO
 
         # First, deduce if we have to increase or decrease the account balance
         if self.split_type == 'DEBIT':
