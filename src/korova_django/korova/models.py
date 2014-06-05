@@ -1,11 +1,63 @@
 from django.db import models
-from currencies import currencies
 from exceptions import KorovaError
-from decimal import Decimal, Context, getcontext
+from decimal import Decimal
 from django.utils import timezone
+from django.db import transaction
 
 DECIMAL_ZERO = Decimal(0)
 QUANTA = Decimal(10) ** (-6)
+
+
+class SplitProcessor(object):
+    def __init__(self, account, increase_operation, decrease_operation):
+        self.account = account
+        self.increase_operation = increase_operation
+        self.decrease_operation = decrease_operation
+    def process(self, split):
+        if split.is_linked is True:
+            raise KorovaError("Split is already processed")
+
+        # Take a look into the future and check if there are future splits that should be reprocessed after this one
+        # if so, unlink them and later process again
+        future_splits = self.account.splits.filter(transaction__transaction_date__gt=split.transaction.transaction_date,
+                                                   is_linked=True).order_by('transaction__transaction_date')
+
+        for fsplit in future_splits:
+            self.unlink(fsplit)
+
+        if split.split_type == self.increase_operation:
+            assert split.local_amount is not None, \
+                "process: local_amount should be present for %s operation in account %s" \
+                                                   % (self.increase_operation, self.account)
+            return_amount = self.account.increase_amount(split.amount, split.local_amount)
+        elif split.split_type == self.decrease_operation:
+            assert split.local_amount is None, \
+                "process: local_amount should not be present for %s operation in account %s" \
+                                               % (self.decrease_operation, self.account)
+            return_amount = self.account.deduct_amount(split.amount)
+
+        split.is_linked = True
+        split.local_cost = return_amount
+        split.save()
+
+        # Now reprocess all the future splits:
+        for fsplit in future_splits:
+            self.process(fsplit)
+
+        return return_amount
+
+    def unlink(self, split):
+        if split.account is None:
+            raise KorovaError("Split is not linked to an account")
+        if split.split_type == self.increase_operation:
+            return_amount = self.account.deduct_amount(split.amount)
+        elif split.split_type == self.decrease_operation:
+            return_amount = self.account.increase_amount(split.amout, split.local_cost)
+
+        split.is_linked = False
+        split.local_cost = 0
+        split.save()
+        return return_amount
 
 # Defining class Enum
 class EnumField(models.Field):
@@ -93,6 +145,23 @@ class Account(models.Model):
                 'EQUITY'
             ))
 
+    split_processor_definitions = {
+        'ASSET' : ('DEBIT','CREDIT'),
+        'LIABILITY' : ('CREDIT','DEBIT'),
+        'INCOME' :  ('CREDIT','DEBIT'),
+        'EXPENSE' : ('DEBIT','CREDIT'),
+        'EQUITY' : ('CREDIT','DEBIT')
+    }
+
+    split_processor = None
+
+    def get_split_processor(self):
+        if self.split_processor is  None:
+            increase_op, decrease_op= self.split_processor_definitions[self.account_type]
+            self.split_processor=SplitProcessor(self, increase_op, decrease_op)
+
+        return self.split_processor
+
     def is_foreign(self):
         return self.profile.default_currency != self.currency
 
@@ -109,44 +178,24 @@ class Account(models.Model):
         instance.account_type=account_type
         instance.currency=currency
 
+
         if instance.is_foreign() and ( account_type == 'INCOME' or account_type == 'EXPENSE'):
             raise KorovaError('A result account (INCOME | EXPENSE) cannot be in a foreign currency')
 
         instance.save()
         return instance
 
-    # Find enough pockets to cover the requested amount, if possible
-    # usage:
-    #   covered_amount, pocket_info = account.find_available_pockets(amount)
-    #   pocket_info is a tuple of (pocket_amount, pocket), where pocket_amount is the
-    #   amount to be deduced from pocket
-    def find_available_pockets(self, amount):
-        amount_to_cover = amount
-        ret_pockets = []
-        available_pockets = self.pockets.filter(local_balance__gt=0).order_by('date')
-
-        for pocket in available_pockets:
-            if pocket.foreign_amount >= amount_to_cover:
-                ret_pockets.append((pocket, amount_to_cover))
-                break
-            else:
-                amount_to_cover -= pocket.foreign_amount
-                ret_pockets.append((pocket, pocket.foreign_amount))
-
-        return amount_to_cover, ret_pockets
-
-    def create_pocket(self, amount, local_amount, date):
+    def create_pocket(self, amount, local_amount):
         pkt = Pocket()
         pkt.foreign_amount = amount
         pkt.local_amount = local_amount
         pkt.foreign_balance = amount
         pkt.local_balance = local_amount
-        pkt.date = date
         pkt.account = self
         pkt.save()
-        return pkt
+        return pkt.local_amount
 
-    def increase_amount(self, amount, date=timezone.now(), local_amount=None):
+    def increase_amount(self, amount, local_amount=None):
         if not local_amount:
             local_amount = amount
 
@@ -156,37 +205,41 @@ class Account(models.Model):
         if self.is_local() and local_amount != amount:
             raise KorovaError('Different amounts in local account')
 
-        return self.create_pocket(amount, local_amount, date)
+        # fix account imbalance
+        inc_amount = max(0, amount - self.imbalance)
+
+        inc_local_amount = ((local_amount*inc_amount)/amount).quantize(QUANTA)
+
+        new_imbalance = max(0, self.imbalance - amount)
+        self.imbalance = new_imbalance
+        if inc_amount <= 0:
+            return DECIMAL_ZERO
+
+        local_amt = self.create_pocket(inc_amount, inc_local_amount)
+        self.save()
+        return local_amt
 
     def deduct_amount(self, amount):
-        available_pockets = self.pockets.filter(foreign_balance__gt=0).order_by('date')
+        available_pockets = self.pockets.filter(foreign_balance__gt=0)
         amount_to_cover = Decimal(amount).quantize(QUANTA)
         local_currency_cost = DECIMAL_ZERO
-        print "AVP : " + str(len(available_pockets))
 
         for pocket in available_pockets:
 
             if pocket.foreign_balance > amount_to_cover:
-                #print 'X %s %s' % (unicode(pocket.foreign_amount), unicode(amount_to_cover))
                 local_amount = ((pocket.local_amount*amount_to_cover)/pocket.foreign_amount).quantize(QUANTA)
                 local_currency_cost += local_amount
                 pocket.foreign_balance -= amount_to_cover
                 pocket.local_balance -= local_amount
                 if pocket.foreign_balance == DECIMAL_ZERO:
-                    #print 'a ' + unicode(pocket)
                     pocket.delete()
                 else:
-                    #print 'b '+ unicode(pocket)
                     pocket.save()
                 amount_to_cover = DECIMAL_ZERO
                 break
             else:
-                #print 'c '+ unicode(pocket)
                 amount_to_cover -= pocket.foreign_balance
                 local_currency_cost += pocket.local_balance
-                #pocket.foreign_balance = DECIMAL_ZERO
-                #pocket.local_balance = DECIMAL_ZERO
-                #pocket.save()
                 pocket.delete()
 
 
@@ -213,7 +266,6 @@ class Pocket(models.Model):
     local_amount = models.DecimalField(max_digits=18, decimal_places=6)     # Creation amount in the profile's currency
     foreign_balance = models.DecimalField(max_digits=18, decimal_places=6)  # Current balance in the account's currency
     local_balance = models.DecimalField(max_digits=18, decimal_places=6)    # Current balance in the profile's currency
-    date = models.DateTimeField()
     account = models.ForeignKey(Account, related_name='pockets')
 
     def __unicode__(self):
@@ -229,21 +281,30 @@ class Transaction(models.Model):
     transaction_date = models.DateTimeField()
 
     @classmethod
-    def create(cls, date, description, profile, t_debits, t_credits):
-        instance = cls(date=date, description=description)
+    @transaction.atomic
+    def create(cls, date, description, splits):
+        instance = cls()
+        instance.transaction_date = date
+        instance.creation_date = timezone.now()
+        instance.description = description
+        t_debits = filter(lambda x: x.split_type == 'DEBIT', splits)
+        t_credits = filter(lambda x: x.split_type == 'CREDIT', splits)
         tot_debits = reduce(lambda x, y: x.amount + y.amount, t_debits)
         tot_credits = reduce(lambda x, y: x.amount + y.amount, t_credits)
         if tot_debits != tot_credits:
             raise KorovaError("Imbalanced Transaction")
 
-        for split in t_debits + t_credits:
+        for split in splits:
             instance.add_split(split)
+
+        instance.save()
+        return instance
 
     def add_split(self, split):
         if split.transaction is not None:
             raise KorovaError("Split is already in a Transaction")
         split.transaction = self
-        split.link()
+        split.account.get_split_processor().process(split)
 
 
 
@@ -251,72 +312,21 @@ class Transaction(models.Model):
 class Split(models.Model):
     amount = models.DecimalField(max_digits=18, decimal_places=6)
     local_amount = models.DecimalField(max_digits=18,decimal_places=6)
-    account = models.ForeignKey(Account, null=True)
+    local_cost = models.DecimalField(max_digits=18,decimal_places=6)
+    account = models.ForeignKey(Account, null=True, related_name='splits')
     split_type = EnumField(values=('DEBIT', 'CREDIT'))
     is_linked = models.BooleanField()
-    date = models.DateTimeField()
     transaction = models.ForeignKey(Transaction, related_name='splits', null=True)
 
     @classmethod
-    def create(cls, amount, account, split_type, date):
+    def create(cls, amount, account, split_type):
         instance = Split()
         instance.amount = amount
         instance.account = account
         instance.split_type = split_type
-        instance.date = date
         instance.is_linked = False
         instance.local_amount = DECIMAL_ZERO
-
-    def link(self):
-        operation = None
-        local_currency_cost = DECIMAL_ZERO
-
-        # First, deduce if we have to increase or decrease the account balance
-        if self.split_type == 'DEBIT':
-            if self.account.account_type in ('ASSET', 'EXPENSE'):
-                operation = 'CREATE'
-            else:
-                operation = 'DECREASE'
-        else:
-            if self.account.account_type in ('ASSET', 'EXPENSE'):
-                operation = 'DECREASE'
-            else:
-                operation = 'CREATE'
-
-        if operation == 'CREATE':
-            po = PocketOperation()
-            po.operation_type = 'CREATE'
-
-            p = Pocket()
-            p.account = self.account
-            p.foreign_amount = self.amount
-            p.date = self.date
-            p.foreign_balance = self.amount
-
-            po.pocket = p
-            po.split = self
-
-        else: ## 'DECREASE'
-            covered_amount, pocket_info = self.account.find_available_pocket(self.amount)
-
-            # for each element in pocket_info, we need to create a pocket operation
-            for amt, pocket in pocket_info:
-                pocket.foreign_balance -= amt
-                local_currency_cost += (pocket.local_amount*amt)/pocket.foreign_amount
-                po = PocketOperation()
-                po.pocket = pocket
-                po.operation_type = 'DECREASE'
-                po.split = self
-
-            # if there's any amount uncovered, we much add it to the account imbalance
-            if covered_amount < self.amount:
-                self.account.imbalance = self.amount - covered_amount
-
-        self.local_amount = local_currency_cost
-        self.is_linked = True
+        instance.local_cost = DECIMAL_ZERO
+        return instance
 
 
-class PocketOperation(models.Model):
-    operation_type = EnumField(values=('CREATE', 'DECREASE'))
-    pocket = models.ForeignKey(Pocket)
-    split = models.ForeignKey(Split, related_name='pocketOperations')

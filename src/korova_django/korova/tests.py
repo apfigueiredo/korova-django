@@ -9,7 +9,6 @@ import decimal
 brl = currencies['BRL']
 usd = currencies['USD']
 
-
 # Create your tests here.
 class KorovaModelTests(TestCase):
 
@@ -56,11 +55,11 @@ class KorovaModelTests(TestCase):
     def test_different_amounts_in_local_account(self):
         with self.assertRaises(KorovaError):
             acc = self.group.create_account('T01', 'test account', brl, 'ASSET')
-            acc.increase_amount(100, timezone.now(), 200)
+            acc.increase_amount(100, 200)
 
     def test_equal_amounts_in_local_account(self):
         acc = self.group.create_account('T01', 'test account', brl, 'ASSET')
-        acc.increase_amount(100, timezone.now(), 100)
+        acc.increase_amount(100, 100)
         foreign, local = acc.get_balances()
         self.assertEqual(foreign, local)
         self.assertEqual(acc.imbalance,0)
@@ -80,7 +79,7 @@ class KorovaModelTests(TestCase):
 
     def test_deduct_amounts_in_foreign_account(self):
         acc = self.group.create_account('T01', 'test account', usd, 'ASSET')
-        acc.increase_amount(1000, timezone.now(), 2000)
+        acc.increase_amount(1000, 2000)
         local_cost = 0
         for i in range(10):
             local_cost += acc.deduct_amount(100)
@@ -93,11 +92,11 @@ class KorovaModelTests(TestCase):
 
     def test_deduct_amount_in_foreign_account_with_multiple_pockets(self):
         acc = self.group.create_account('T01', 'test account', usd, 'ASSET')
-        acc.increase_amount(1000, timezone.now(), 1000)
-        acc.increase_amount(1000, timezone.now(), 2000)
-        acc.increase_amount(1000, timezone.now(), 3000)
-        acc.increase_amount(1000, timezone.now(), 4000)
-        acc.increase_amount(1000, timezone.now(), 5000)
+        acc.increase_amount(1000, 1000)
+        acc.increase_amount(1000, 2000)
+        acc.increase_amount(1000, 3000)
+        acc.increase_amount(1000, 4000)
+        acc.increase_amount(1000, 5000)
         local_cost = 0
         for i in range(10):
             local_cost += acc.deduct_amount(500)
@@ -115,33 +114,68 @@ class KorovaModelTests(TestCase):
         total_foreign = DECIMAL_ZERO
         for i in range(50):
             r = Decimal(random.uniform(10, 20)).quantize(QUANTA)
-            #r = Decimal(random.uniform(100, 200))
             total_foreign += r
-            acc.increase_amount(r, timezone.now(), Decimal(random.uniform(20,50)).quantize(QUANTA))
-            #acc.increase_amount(r, timezone.now(), Decimal(random.uniform(200,500)))
+            acc.increase_amount(r, Decimal(random.uniform(20,50)).quantize(QUANTA))
 
         fb,dummy = acc.get_balances()
         self.assertEqual(fb, total_foreign)
 
         while True:
             r = Decimal(random.uniform(5, 10)).quantize(QUANTA)
-            #r = Decimal(random.uniform(10, 100))
             ded = min(fb,r)
-            foreign, local = acc.get_balances()
-            print fb, foreign
             acc.deduct_amount(ded)
             fb -= ded
-
             if fb <= 0:
                 break
 
         foreign, local = acc.get_balances()
-        print fb, foreign
         self.assertEqual(foreign, 0, 'foreign = ' + unicode(foreign))
         self.assertEqual(local, 0, 'local = ' + unicode(local))
         self.assertEqual(acc.imbalance,0, 'imbalance = ' + unicode(acc.imbalance))
         self.assertFalse(acc.pockets.all())
 
+    def test_recover_imbalance_with_residual_imbalance(self):
+        acc = self.group.create_account('T01', 'test account', usd, 'ASSET')
+        acc.deduct_amount(100)
+        acc.increase_amount(50, 100)
+        foreign, local = acc.get_balances()
+        self.assertEqual(foreign, 0)
+        self.assertEqual(local, 0)
+        self.assertEqual(acc.imbalance,50)
+
+    def test_recover_imbalance_full_no_residuals(self):
+        acc = self.group.create_account('T01', 'test account', usd, 'ASSET')
+        acc.deduct_amount(100)
+        acc.increase_amount(100, 200)
+        foreign, local = acc.get_balances()
+        self.assertEqual(foreign, 0)
+        self.assertEqual(local, 0)
+        self.assertEqual(acc.imbalance,0)
+
+    def test_recover_imbalance_with_residual_balance(self):
+        acc = self.group.create_account('T01', 'test account', usd, 'ASSET')
+        acc.deduct_amount(200)
+        acc.increase_amount(400, 200)
+        foreign, local = acc.get_balances()
+
+        self.assertEqual(local, 100)
+        self.assertEqual(acc.imbalance,0)
+        self.assertEqual(foreign, 200)
+
+    def test_transaction_local_accounts_asset_liability(self):
+        asset = self.group.create_account('T01', 'test account', brl, 'ASSET')
+        liability = self.group.create_account('T02', 'test account', brl, 'LIABILITY')
+
+        split_liability = Split.create(100,liability,'CREDIT')
+        split_asset = Split.create(100,asset,'DEBIT')
+
+        transaction = Transaction.create(timezone.now(),"Test Transaction", [split_liability, split_asset])
+        af,al = asset.get_balances()
+        lf,ll = liability.get_balances()
+        self.assertEqual(af,100)
+        self.assertEqual(al,100)
+        self.assertEqual(lf,100)
+        self.assertEqual(ll,100)
 
 
 
