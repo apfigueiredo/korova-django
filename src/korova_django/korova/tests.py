@@ -9,6 +9,7 @@ import decimal
 brl = currencies['BRL']
 usd = currencies['USD']
 
+
 # Create your tests here.
 class KorovaModelTests(TestCase):
 

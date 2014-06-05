@@ -13,6 +13,7 @@ class SplitProcessor(object):
         self.account = account
         self.increase_operation = increase_operation
         self.decrease_operation = decrease_operation
+
     def process(self, split):
         if split.is_linked is True:
             raise KorovaError("Split is already processed")
@@ -21,19 +22,19 @@ class SplitProcessor(object):
         # if so, unlink them and later process again
         future_splits = self.account.splits.filter(transaction__transaction_date__gt=split.transaction.transaction_date,
                                                    is_linked=True).order_by('transaction__transaction_date')
-
-        for fsplit in future_splits:
-            self.unlink(fsplit)
+        return_amount = DECIMAL_ZERO
+        for f_split in future_splits:
+            self.unlink(f_split)
 
         if split.split_type == self.increase_operation:
             assert split.local_amount is not None, \
                 "process: local_amount should be present for %s operation in account %s" \
-                                                   % (self.increase_operation, self.account)
+                % (self.increase_operation, self.account)
             return_amount = self.account.increase_amount(split.amount, split.local_amount)
         elif split.split_type == self.decrease_operation:
             assert split.local_amount is None, \
                 "process: local_amount should not be present for %s operation in account %s" \
-                                               % (self.decrease_operation, self.account)
+                % (self.decrease_operation, self.account)
             return_amount = self.account.deduct_amount(split.amount)
 
         split.is_linked = True
@@ -41,12 +42,13 @@ class SplitProcessor(object):
         split.save()
 
         # Now reprocess all the future splits:
-        for fsplit in future_splits:
-            self.process(fsplit)
+        for f_split in future_splits:
+            self.process(f_split)
 
         return return_amount
 
     def unlink(self, split):
+        return_amount = DECIMAL_ZERO
         if split.account is None:
             raise KorovaError("Split is not linked to an account")
         if split.split_type == self.increase_operation:
@@ -58,6 +60,7 @@ class SplitProcessor(object):
         split.local_cost = 0
         split.save()
         return return_amount
+
 
 # Defining class Enum
 class EnumField(models.Field):
@@ -94,13 +97,13 @@ class Currency(models.Model):
 
 
 class Profile(models.Model):
-    accounting_mode = EnumField(values=('LIFO','FIFO'))  # for now, FIFO is assumed
+    accounting_mode = EnumField(values=('LIFO', 'FIFO'))  # for now, FIFO is assumed
     default_currency = models.ForeignKey(Currency)
     name = models.CharField(max_length=300)
 
     @classmethod
     def create(cls, default_currency, name, accounting_mode='FIFO'):
-        return cls.objects.create(default_currency=default_currency,accounting_mode=accounting_mode, name=name)
+        return cls.objects.create(default_currency=default_currency, accounting_mode=accounting_mode, name=name)
 
     def create_book(self, start, end=None):
         return Book.objects.create(start=start, end=end, profile=self)
@@ -125,7 +128,8 @@ class Group(models.Model):
         return Group.objects.create(code=code, name=name, book=self.book, parent=self)
 
     def create_account(self, code, name, currency, account_type):
-        acc = Account.create(code=code, name=name, profile=self.book.profile, currency=currency, account_type=account_type)
+        acc = Account.create(code=code, name=name, profile=self.book.profile,
+                             currency=currency, account_type=account_type)
         acc.group = self
         acc.save()
         return acc
@@ -138,27 +142,27 @@ class Account(models.Model):
     group = models.ForeignKey(Group, related_name='accounts', null=True)
     currency = models.ForeignKey(Currency)
     account_type = EnumField(values=(
-                'ASSET',
-                'LIABILITY',
-                'INCOME',
-                'EXPENSE',
-                'EQUITY'
-            ))
+        'ASSET',
+        'LIABILITY',
+        'INCOME',
+        'EXPENSE',
+        'EQUITY'
+    ))
 
     split_processor_definitions = {
-        'ASSET' : ('DEBIT','CREDIT'),
-        'LIABILITY' : ('CREDIT','DEBIT'),
-        'INCOME' :  ('CREDIT','DEBIT'),
-        'EXPENSE' : ('DEBIT','CREDIT'),
-        'EQUITY' : ('CREDIT','DEBIT')
+        'ASSET': ('DEBIT', 'CREDIT'),
+        'LIABILITY': ('CREDIT', 'DEBIT'),
+        'INCOME':  ('CREDIT', 'DEBIT'),
+        'EXPENSE': ('DEBIT', 'CREDIT'),
+        'EQUITY': ('CREDIT', 'DEBIT')
     }
 
     split_processor = None
 
     def get_split_processor(self):
-        if self.split_processor is  None:
-            increase_op, decrease_op= self.split_processor_definitions[self.account_type]
-            self.split_processor=SplitProcessor(self, increase_op, decrease_op)
+        if self.split_processor is None:
+            increase_op, decrease_op = self.split_processor_definitions[str(self.account_type)]
+            self.split_processor = SplitProcessor(self, increase_op, decrease_op)
 
         return self.split_processor
 
@@ -171,15 +175,14 @@ class Account(models.Model):
     @classmethod
     def create(cls, code, name, profile, account_type, currency):
         instance = cls()
-        instance.code=code
-        instance.name=name
-        instance.profile=profile
-        instance.imbalance=DECIMAL_ZERO
-        instance.account_type=account_type
-        instance.currency=currency
+        instance.code = code
+        instance.name = name
+        instance.profile = profile
+        instance.imbalance = DECIMAL_ZERO
+        instance.account_type = account_type
+        instance.currency = currency
 
-
-        if instance.is_foreign() and ( account_type == 'INCOME' or account_type == 'EXPENSE'):
+        if instance.is_foreign() and (account_type == 'INCOME' or account_type == 'EXPENSE'):
             raise KorovaError('A result account (INCOME | EXPENSE) cannot be in a foreign currency')
 
         instance.save()
@@ -242,7 +245,6 @@ class Account(models.Model):
                 local_currency_cost += pocket.local_balance
                 pocket.delete()
 
-
         if amount_to_cover > DECIMAL_ZERO:
             # could not cover all the requested amount, imbalance
             self.imbalance = amount_to_cover
@@ -258,7 +260,7 @@ class Account(models.Model):
             local_balance += pocket.local_balance
             foreign_balance += pocket.foreign_balance
 
-        return  foreign_balance, local_balance
+        return foreign_balance, local_balance
 
 
 class Pocket(models.Model):
@@ -307,12 +309,10 @@ class Transaction(models.Model):
         split.account.get_split_processor().process(split)
 
 
-
-
 class Split(models.Model):
     amount = models.DecimalField(max_digits=18, decimal_places=6)
-    local_amount = models.DecimalField(max_digits=18,decimal_places=6)
-    local_cost = models.DecimalField(max_digits=18,decimal_places=6)
+    local_amount = models.DecimalField(max_digits=18, decimal_places=6)
+    local_cost = models.DecimalField(max_digits=18, decimal_places=6)
     account = models.ForeignKey(Account, null=True, related_name='splits')
     split_type = EnumField(values=('DEBIT', 'CREDIT'))
     is_linked = models.BooleanField()
@@ -328,5 +328,3 @@ class Split(models.Model):
         instance.local_amount = DECIMAL_ZERO
         instance.local_cost = DECIMAL_ZERO
         return instance
-
-
