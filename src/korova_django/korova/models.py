@@ -27,15 +27,15 @@ class SplitProcessor(object):
             self.unlink(f_split)
 
         if split.split_type == self.increase_operation:
-            assert split.local_amount is not None, \
-                "process: local_amount should be present for %s operation in account %s" \
+            assert split.profile_amount is not None, \
+                "process: profile_amount should be present for %s operation in account %s" \
                 % (self.increase_operation, self.account)
-            return_amount = self.account.increase_amount(split.amount, split.local_amount)
+            return_amount = self.account.increase_amount(split.account_amount, split.profile_amount)
         elif split.split_type == self.decrease_operation:
-            assert split.local_amount is None, \
-                "process: local_amount should not be present for %s operation in account %s" \
+            assert split.profile_amount is None, \
+                "process: profile_amount should not be present for %s operation in account %s" \
                 % (self.decrease_operation, self.account)
-            return_amount = self.account.deduct_amount(split.amount)
+            return_amount = self.account.deduct_amount(split.account_amount)
 
         split.is_linked = True
         split.local_cost = return_amount
@@ -52,9 +52,9 @@ class SplitProcessor(object):
         if split.account is None:
             raise KorovaError("Split is not linked to an account")
         if split.split_type == self.increase_operation:
-            return_amount = self.account.deduct_amount(split.amount)
+            return_amount = self.account.deduct_amount(split.account_amount)
         elif split.split_type == self.decrease_operation:
-            return_amount = self.account.increase_amount(split.amout, split.local_cost)
+            return_amount = self.account.increase_amount(split.account_amount, split.local_cost)
 
         split.is_linked = False
         split.local_cost = 0
@@ -188,61 +188,61 @@ class Account(models.Model):
         instance.save()
         return instance
 
-    def create_pocket(self, amount, local_amount):
+    def create_pocket(self, account_amount, profile_amount):
         pkt = Pocket()
-        pkt.foreign_amount = amount
-        pkt.local_amount = local_amount
-        pkt.foreign_balance = amount
-        pkt.local_balance = local_amount
+        pkt.account_amount = account_amount
+        pkt.profile_amount = profile_amount
+        pkt.account_balance = account_amount
+        pkt.profile_balance = profile_amount
         pkt.account = self
         pkt.save()
-        return pkt.local_amount
+        return pkt.profile_amount
 
-    def increase_amount(self, amount, local_amount=None):
-        if not local_amount:
-            local_amount = amount
+    def increase_amount(self, account_amount, profile_amount=None):
+        if not profile_amount:
+            profile_amount = account_amount
 
-        local_amount = Decimal(local_amount).quantize(QUANTA)
-        amount = Decimal(amount).quantize(QUANTA)
+        profile_amount = Decimal(profile_amount).quantize(QUANTA)
+        account_amount = Decimal(account_amount).quantize(QUANTA)
 
-        if self.is_local() and local_amount != amount:
+        if self.is_local() and profile_amount != account_amount:
             raise KorovaError('Different amounts in local account')
 
         # fix account imbalance
-        inc_amount = max(0, amount - self.imbalance)
+        inc_account_amount = max(0, account_amount - self.imbalance)
 
-        inc_local_amount = ((local_amount*inc_amount)/amount).quantize(QUANTA)
+        inc_profile_amount = ((profile_amount*inc_account_amount)/account_amount).quantize(QUANTA)
 
-        new_imbalance = max(0, self.imbalance - amount)
+        new_imbalance = max(0, self.imbalance - account_amount)
         self.imbalance = new_imbalance
-        if inc_amount <= 0:
+        if inc_account_amount <= 0:
             return DECIMAL_ZERO
 
-        local_amt = self.create_pocket(inc_amount, inc_local_amount)
+        profile_amt = self.create_pocket(inc_account_amount, inc_profile_amount)
         self.save()
-        return local_amt
+        return profile_amt
 
     def deduct_amount(self, amount):
-        available_pockets = self.pockets.filter(foreign_balance__gt=0)
+        available_pockets = self.pockets.filter(account_balance__gt=0)
         amount_to_cover = Decimal(amount).quantize(QUANTA)
-        local_currency_cost = DECIMAL_ZERO
+        profile_currency_cost = DECIMAL_ZERO
 
         for pocket in available_pockets:
 
-            if pocket.foreign_balance > amount_to_cover:
-                local_amount = ((pocket.local_amount*amount_to_cover)/pocket.foreign_amount).quantize(QUANTA)
-                local_currency_cost += local_amount
-                pocket.foreign_balance -= amount_to_cover
-                pocket.local_balance -= local_amount
-                if pocket.foreign_balance == DECIMAL_ZERO:
+            if pocket.account_balance > amount_to_cover:
+                profile_amount = ((pocket.profile_amount*amount_to_cover)/pocket.account_amount).quantize(QUANTA)
+                profile_currency_cost += profile_amount
+                pocket.account_balance -= amount_to_cover
+                pocket.profile_balance -= profile_amount
+                if pocket.account_balance == DECIMAL_ZERO:
                     pocket.delete()
                 else:
                     pocket.save()
                 amount_to_cover = DECIMAL_ZERO
                 break
             else:
-                amount_to_cover -= pocket.foreign_balance
-                local_currency_cost += pocket.local_balance
+                amount_to_cover -= pocket.account_balance
+                profile_currency_cost += pocket.profile_balance
                 pocket.delete()
 
         if amount_to_cover > DECIMAL_ZERO:
@@ -250,30 +250,30 @@ class Account(models.Model):
             self.imbalance = amount_to_cover
             self.save()
 
-        return local_currency_cost
+        return profile_currency_cost
 
     def get_balances(self):
-        my_pockets = self.pockets.filter(foreign_balance__gt=0)
-        local_balance = DECIMAL_ZERO
-        foreign_balance = DECIMAL_ZERO
+        my_pockets = self.pockets.filter(account_balance__gt=0)
+        account_balance = DECIMAL_ZERO
+        profile_balance = DECIMAL_ZERO
         for pocket in my_pockets:
-            local_balance += pocket.local_balance
-            foreign_balance += pocket.foreign_balance
+            account_balance += pocket.account_balance
+            profile_balance += pocket.profile_balance
 
-        return foreign_balance, local_balance
+        return account_balance, profile_balance
 
 
 class Pocket(models.Model):
-    foreign_amount = models.DecimalField(max_digits=18, decimal_places=6)   # Creation amount in the account's currency
-    local_amount = models.DecimalField(max_digits=18, decimal_places=6)     # Creation amount in the profile's currency
-    foreign_balance = models.DecimalField(max_digits=18, decimal_places=6)  # Current balance in the account's currency
-    local_balance = models.DecimalField(max_digits=18, decimal_places=6)    # Current balance in the profile's currency
+    account_amount = models.DecimalField(max_digits=18, decimal_places=6)   # Creation amount in the account's currency
+    profile_amount = models.DecimalField(max_digits=18, decimal_places=6)     # Creation amount in the profile's currency
+    account_balance = models.DecimalField(max_digits=18, decimal_places=6)  # Current balance in the account's currency
+    profile_balance = models.DecimalField(max_digits=18, decimal_places=6)    # Current balance in the profile's currency
     account = models.ForeignKey(Account, related_name='pockets')
 
     def __unicode__(self):
         return u'Pocket(f_amt=%s,l_amt=%s,f_bal=%s,l_bal=%s,date=%s)' % (
-            self.foreign_amount, self.local_amount, self.foreign_balance,
-            self.local_balance, self.date
+            self.account_amount, self.profile_amount, self.account_balance,
+            self.profile_balance, self.date
         )
 
 
@@ -291,8 +291,8 @@ class Transaction(models.Model):
         instance.description = description
         t_debits = filter(lambda x: x.split_type == 'DEBIT', splits)
         t_credits = filter(lambda x: x.split_type == 'CREDIT', splits)
-        tot_debits = reduce(lambda x, y: x.amount + y.amount, t_debits)
-        tot_credits = reduce(lambda x, y: x.amount + y.amount, t_credits)
+        tot_debits = reduce(lambda x, y: x.account_amount + y.account_amount, t_debits)
+        tot_credits = reduce(lambda x, y: x.account_amount + y.account_amount, t_credits)
         if tot_debits != tot_credits:
             raise KorovaError("Imbalanced Transaction")
 
@@ -310,8 +310,8 @@ class Transaction(models.Model):
 
 
 class Split(models.Model):
-    amount = models.DecimalField(max_digits=18, decimal_places=6)
-    local_amount = models.DecimalField(max_digits=18, decimal_places=6)
+    account_amount = models.DecimalField(max_digits=18, decimal_places=6)
+    profile_amount = models.DecimalField(max_digits=18, decimal_places=6)
     local_cost = models.DecimalField(max_digits=18, decimal_places=6)
     account = models.ForeignKey(Account, null=True, related_name='splits')
     split_type = EnumField(values=('DEBIT', 'CREDIT'))
@@ -321,10 +321,10 @@ class Split(models.Model):
     @classmethod
     def create(cls, amount, account, split_type):
         instance = Split()
-        instance.amount = amount
+        instance.account_amount = amount
         instance.account = account
         instance.split_type = split_type
         instance.is_linked = False
-        instance.local_amount = DECIMAL_ZERO
+        instance.profile_amount = DECIMAL_ZERO
         instance.local_cost = DECIMAL_ZERO
         return instance
