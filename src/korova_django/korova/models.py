@@ -7,7 +7,7 @@ from django.db import transaction
 DECIMAL_ZERO = Decimal(0)
 QUANTA = Decimal(10) ** (-6)
 
-
+# TODO: REFACTOR THIS WHOLE THING TO USE ACCOUNT NATURE
 class SplitProcessor(object):
     def __init__(self, account, increase_operation, decrease_operation):
         self.account = account
@@ -157,7 +157,19 @@ class Account(models.Model):
         'EQUITY': ('CREDIT', 'DEBIT')
     }
 
+    # TODO: REFACTOR THIS LATER
+    account_natures = {
+        'ASSET': 'DEBIT',
+        'LIABILITY': 'CREDIT',
+        'INCOME': 'CREDIT',
+        'EXPENSE': 'DEBIT',
+        'EQUITY': 'CREDIT'
+    }
+
     split_processor = None
+
+    def get_nature(self):
+        return self.account_natures[str(self.account_type)]
 
     def get_split_processor(self):
         if self.split_processor is None:
@@ -265,9 +277,9 @@ class Account(models.Model):
 
 class Pocket(models.Model):
     account_amount = models.DecimalField(max_digits=18, decimal_places=6)   # Creation amount in the account's currency
-    profile_amount = models.DecimalField(max_digits=18, decimal_places=6)     # Creation amount in the profile's currency
+    profile_amount = models.DecimalField(max_digits=18, decimal_places=6)   # Creation amount in the profile's currency
     account_balance = models.DecimalField(max_digits=18, decimal_places=6)  # Current balance in the account's currency
-    profile_balance = models.DecimalField(max_digits=18, decimal_places=6)    # Current balance in the profile's currency
+    profile_balance = models.DecimalField(max_digits=18, decimal_places=6)  # Current balance in the profile's currency
     account = models.ForeignKey(Account, related_name='pockets')
 
     def __unicode__(self):
@@ -328,3 +340,11 @@ class Split(models.Model):
         instance.profile_amount = DECIMAL_ZERO
         instance.local_cost = DECIMAL_ZERO
         return instance
+
+    # this is for transaction validation purposes
+    # +1 if the split will increase account balance, -1 otherwise
+    def operation_sign(self):
+        if self.split_type == self.account.get_nature():
+            return 1
+        else:
+            return -1
