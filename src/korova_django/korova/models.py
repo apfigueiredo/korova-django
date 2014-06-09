@@ -113,6 +113,10 @@ class Book(models.Model):
     start = models.DateField()
     end = models.DateField(null=True)
     profile = models.ForeignKey(Profile, related_name='books')
+    initial_balances_acc = models.ForeignKey(Account, null=True)
+    profit_loss_acc = models.ForeignKey(Account, null=True)
+    currency_xe_income_acc = models.ForeignKey(Account, null=True)
+    currency_xe_expense_acc = models.ForeignKey(Account, null=True)
 
     def create_top_level_group(self, name, code):
         return Group.objects.create(code=code, name=name, book=self, parent=None)
