@@ -121,6 +121,17 @@ class Book(models.Model):
     def create_top_level_group(self, name, code):
         return Group.objects.create(code=code, name=name, book=self, parent=None)
 
+    def add_transaction(self, date, description, splits):
+        if self.initial_balances_acc is None or \
+                self.profit_loss_acc is None or \
+                self.currency_xe_expense_acc is None or \
+                self.currency_xe_income_acc is None:
+
+            raise KorovaError("Book is not ready for transactions because one of its main accounts is null")
+
+
+
+
 
 class Group(models.Model):
     code = models.CharField(max_length=30, unique=True)
@@ -311,6 +322,24 @@ class Transaction(models.Model):
         tot_credits = reduce(lambda x, y: x.account_amount + y.account_amount, t_credits)
         if tot_debits != tot_credits:
             raise KorovaError("Imbalanced Transaction")
+
+        foreign_increase_debit_splits = [x for x in t_debits if x.operation_sign() == 1 and
+                                         x.account.is_foreign() is True]
+        local_increase_debit_splits = [x for x in t_debits if x.operation_sign() == 1 and
+                                       x.account.is_local() is True]
+
+        foreign_increase_credit_splits = [x for x in t_credits if x.operation_sign() == 1 and
+                                          x.account.is_foreign() is True]
+        local_increase_credit_splits = [x for x in t_credits if x.operation_sign() == 1 and
+                                        x.account.is_local() is True]
+
+        if len(foreign_increase_credit_splits) > 1 or len(foreign_increase_debit_splits) > 1:
+            raise KorovaError("Increasing the amount of more than one foreign account of same nature " +
+                              " (debit/credit) is not supported")
+
+        tot_profile_currency_credit = 0
+        for split in t_credits:
+            pass
 
         for split in splits:
             instance.add_split(split)
