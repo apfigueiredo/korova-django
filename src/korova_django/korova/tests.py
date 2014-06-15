@@ -20,6 +20,8 @@ class KorovaModelTests(TestCase):
         cls.profile = Profile.create(brl, "Test Profile")
         cls.book = cls.profile.create_book(start=timezone.now())
         cls.group = cls.book.create_top_level_group(name='Test Group', code='G01')
+        cls.group.create_account('R01', 'exchange income', brl, 'INCOME')
+        cls.group.create_account('R02', 'exchange expense', brl, 'EXPENSE')
 
     @classmethod
     def tearDownClass(cls):
@@ -164,7 +166,7 @@ class KorovaModelTests(TestCase):
         self.assertEqual(acc.imbalance, 0)
         self.assertEqual(profile_balance, 200)
 
-    def test_transaction_local_accounts_asset_liability(self):
+    def test_transaction_local_accounts_liability_asset(self):
         asset = self.group.create_account('T01', 'test account', brl, 'ASSET')
         liability = self.group.create_account('T02', 'test account', brl, 'LIABILITY')
 
@@ -174,7 +176,58 @@ class KorovaModelTests(TestCase):
         Transaction.create(timezone.now(), "Test Transaction", [split_liability, split_asset])
         aab, apb = asset.get_balances()
         lab, lpb = liability.get_balances()
-        self.assertEqual(aab, 100)
-        self.assertEqual(apb, 100)
+
         self.assertEqual(lab, 100)
         self.assertEqual(lpb, 100)
+        self.assertEqual(aab, 100)
+        self.assertEqual(apb, 100)
+
+    def test_transaction_mixed_accounts_asset_asset(self):
+        asset_brl = self.group.create_account('T01', 'test account', brl, 'ASSET')
+        asset_usd = self.group.create_account('T02', 'test account', usd, 'ASSET')
+
+        asset_brl.increase_amount(100,100)
+
+        split_credit = Split.create(100, asset_brl, 'CREDIT')
+        split_debit = Split.create(50,asset_usd, 'DEBIT')
+
+        Transaction.create(timezone.now(), "Test Transaction", [split_credit, split_debit])
+
+        brl_acc_amt, brl_prof_amt = asset_brl.get_balances()
+        usd_acc_amt, usd_prof_amt = asset_usd.get_balances()
+        self.assertEqual(brl_acc_amt, 0)
+        self.assertEqual(brl_prof_amt, 0)
+        self.assertEqual(usd_acc_amt, 50)
+        self.assertEqual(usd_prof_amt, 100)
+
+
+    def test_transaction_mixed_accounts_with_xchg_income(self):
+        asset_brl = self.group.create_account('T01', 'test account', brl, 'ASSET')
+        asset_usd = self.group.create_account('T02', 'test account', usd, 'ASSET')
+        liab_usd = self.group.create_account('T03', 'test account', usd, 'LIABILITY')
+        r_xchg_income = Account.objects.get(code='R01')
+        r_xchg_expense = Account.objects.get(code='R02')
+
+        # First, transaction to borrow 100 usd from somebody
+        credit_lend = Split.create(100, liab_usd, 'CREDIT')
+        debit_lend = Split.create(100, asset_usd, 'DEBIT')
+
+        Transaction.create(timezone.now(), 'Lend transaction', [credit_lend, debit_lend])
+
+        # Now, sell some dollares
+        credit_sell = Split.create(100, asset_usd, 'CREDIT')
+        debit_sell = Split.create(70, asset_brl, 'DEBIT')
+
+        Transaction.create(timezone.now(), 'Sell Transaction', [credit_sell, debit_sell])
+
+        bal_asset_brl_acc, bal_asset_brl_prof = asset_brl.get_balances()
+        bal_asset_usd_acc, bal_asset_usd_prof = asset_usd.get_balances()
+        bal_xchg_income_acc, bal_xchg_income_prof = r_xchg_income.get_balances()
+
+        print bal_xchg_income_prof
+
+        self.assertEqual(bal_asset_brl_acc, 70)
+        self.assertEqual(bal_asset_brl_prof, 70)
+        self.assertEqual(bal_asset_usd_acc, 0)
+        self.assertEqual(bal_asset_usd_prof, 0)
+        self.assertEqual(bal_xchg_income_acc, 100)

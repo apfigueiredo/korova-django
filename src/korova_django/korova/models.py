@@ -4,6 +4,7 @@ from decimal import Decimal
 from django.utils import timezone
 from django.db import transaction
 
+
 DECIMAL_ZERO = Decimal(0)
 QUANTA = Decimal(10) ** (-6)
 
@@ -27,18 +28,19 @@ class SplitProcessor(object):
             self.unlink(f_split)
 
         if split.split_type == self.increase_operation:
-            assert split.profile_amount is not None, \
-                "process: profile_amount should be present for %s operation in account %s" \
-                % (self.increase_operation, self.account)
-            return_amount = self.account.increase_amount(split.account_amount, split.profile_amount)
+        #     assert split.profile_amount is not None, \
+        #         "process: profile_amount should be present for %s operation in account %s" \
+        #         % (self.increase_operation, self.account)
+             return_amount = self.account.increase_amount(split.account_amount, split.profile_amount)
         elif split.split_type == self.decrease_operation:
-            assert split.profile_amount is None, \
-                "process: profile_amount should not be present for %s operation in account %s" \
-                % (self.decrease_operation, self.account)
-            return_amount = self.account.deduct_amount(split.account_amount)
+        #     assert split.profile_amount is None, \
+        #         "process: profile_amount should not be present for %s operation in account %s" \
+        #         % (self.decrease_operation, self.account)
+             return_amount = self.account.deduct_amount(split.account_amount)
 
-        split.is_linked = True
-        split.local_cost = return_amount
+        split.profile_amount = return_amount
+        #print split.account.name, split.account.account_type
+        split.is_linked  = True
         split.save()
 
         # Now reprocess all the future splits:
@@ -54,12 +56,17 @@ class SplitProcessor(object):
         if split.split_type == self.increase_operation:
             return_amount = self.account.deduct_amount(split.account_amount)
         elif split.split_type == self.decrease_operation:
-            return_amount = self.account.increase_amount(split.account_amount, split.local_cost)
+            return_amount = self.account.increase_amount(split.account_amount, split.profile_amount)
 
         split.is_linked = False
-        split.local_cost = 0
+        split.profile_amount = 0
         split.save()
         return return_amount
+
+
+#TODO: We need this class
+class ExchangeRate(object):
+    pass
 
 
 # Defining class Enum
@@ -113,10 +120,10 @@ class Book(models.Model):
     start = models.DateField()
     end = models.DateField(null=True)
     profile = models.ForeignKey(Profile, related_name='books')
-    initial_balances_acc = models.ForeignKey(Account, null=True)
-    profit_loss_acc = models.ForeignKey(Account, null=True)
-    currency_xe_income_acc = models.ForeignKey(Account, null=True)
-    currency_xe_expense_acc = models.ForeignKey(Account, null=True)
+    initial_balances_acc = models.ForeignKey('Account', null=True, related_name='initial_balances_acc')
+    profit_loss_acc = models.ForeignKey('Account', null=True, related_name='profit_loss_acc')
+    currency_xe_income_acc = models.ForeignKey('Account', null=True, related_name='currency_xe_income_acc')
+    currency_xe_expense_acc = models.ForeignKey('Account', null=True, related_name='currency_xe_expense_acc')
 
     def create_top_level_group(self, name, code):
         return Group.objects.create(code=code, name=name, book=self, parent=None)
@@ -128,9 +135,6 @@ class Book(models.Model):
                 self.currency_xe_income_acc is None:
 
             raise KorovaError("Book is not ready for transactions because one of its main accounts is null")
-
-
-
 
 
 class Group(models.Model):
@@ -223,14 +227,17 @@ class Account(models.Model):
         pkt.profile_balance = profile_amount
         pkt.account = self
         pkt.save()
+        #print 'create_procket[0] self.get_balances(): ', self.get_balances()
         return pkt.profile_amount
 
     def increase_amount(self, account_amount, profile_amount=None):
+        #print 'increase_amount[0] ', self.name, self.account_type, account_amount, profile_amount
         if not profile_amount:
             profile_amount = account_amount
 
         profile_amount = Decimal(profile_amount).quantize(QUANTA)
         account_amount = Decimal(account_amount).quantize(QUANTA)
+        #print 'increase_amount[1] profile_amount, account_amount:', profile_amount, account_amount
 
         if self.is_local() and profile_amount != account_amount:
             raise KorovaError('Different amounts in local account')
@@ -245,8 +252,10 @@ class Account(models.Model):
         if inc_account_amount <= 0:
             return DECIMAL_ZERO
 
+        #print 'increase_amount[2] inc_account_amount, inc_profile_amount:', inc_account_amount, inc_profile_amount
         profile_amt = self.create_pocket(inc_account_amount, inc_profile_amount)
         self.save()
+        #print 'increase_amount[3] profile_amt:',profile_amt
         return profile_amt
 
     def deduct_amount(self, amount):
@@ -312,52 +321,118 @@ class Transaction(models.Model):
     @classmethod
     @transaction.atomic
     def create(cls, date, description, splits):
+        from currencies import RateProvider
         instance = cls()
         instance.transaction_date = date
         instance.creation_date = timezone.now()
         instance.description = description
+
+        #print "==========================='"
+
+        #check that no split is already in a transaction
+        for s in splits:
+            if s.transaction is not None:
+                raise KorovaError("Split is already in a Transaction")
+
         t_debits = filter(lambda x: x.split_type == 'DEBIT', splits)
         t_credits = filter(lambda x: x.split_type == 'CREDIT', splits)
-        tot_debits = reduce(lambda x, y: x.account_amount + y.account_amount, t_debits)
-        tot_credits = reduce(lambda x, y: x.account_amount + y.account_amount, t_credits)
-        if tot_debits != tot_credits:
-            raise KorovaError("Imbalanced Transaction")
 
         foreign_increase_debit_splits = [x for x in t_debits if x.operation_sign() == 1 and
                                          x.account.is_foreign() is True]
-        local_increase_debit_splits = [x for x in t_debits if x.operation_sign() == 1 and
-                                       x.account.is_local() is True]
 
         foreign_increase_credit_splits = [x for x in t_credits if x.operation_sign() == 1 and
                                           x.account.is_foreign() is True]
-        local_increase_credit_splits = [x for x in t_credits if x.operation_sign() == 1 and
-                                        x.account.is_local() is True]
 
         if len(foreign_increase_credit_splits) > 1 or len(foreign_increase_debit_splits) > 1:
             raise KorovaError("Increasing the amount of more than one foreign account of same nature " +
                               " (debit/credit) is not supported")
 
-        tot_profile_currency_credit = 0
+        # assert that all increases have a profile_amount
+        # first the credits:
+        l_tot_credits = 0
         for split in t_credits:
+            #print 'split.profile_amount =', split.profile_amount, ' split.profile_amount == DECIMAL_ZERO:', split.profile_amount == DECIMAL_ZERO, split.account.account_type
+            #if split.profile_amount == DECIMAL_ZERO and split.operation_sign() == 1:  # increase
+            if split.profile_amount == DECIMAL_ZERO:  # increase
+                #print 'entrei'
+                if split.account.is_foreign():
+                    xg_rate = RateProvider.get_exchange_rate(split.account.currency,
+                                                             split.account.profile.default_currency)
+                    split.profile_amount = xg_rate * split.account_amount
+                else:
+                    split.profile_amount = split.account_amount
+                l_tot_credits += split.profile_amount
+
+
+        # And now the debits. Locals are easy.
+        l_local_debits = 0
+        for split in [s for s in t_debits if s.account.is_local()]:
+            l_local_debits += split.account_amount
+            split.profile_amount = split.account_amount
+
+        #print l_tot_credits, l_local_debits
+        # now the foreign one, if it exists:
+        try:
+            foreign = foreign_increase_debit_splits[0]
+            amt = l_tot_credits - l_local_debits
+            if amt <= DECIMAL_ZERO:
+                raise KorovaError("Nothing left to assign to foreign debit split")
+            else:
+                foreign.profile_amount = amt
+        except IndexError:
             pass
 
-        for split in splits:
-            instance.add_split(split)
+        processed_splits = []
+
+        # from now on, we need to rollback every processed split in case of failure
+        try:
+            for split in splits:
+                #print 'Transaction.create 0', split.account.name, split.account.account_type, split.split_type, split.account_amount, split.profile_amount
+                instance.add_split(split)
+                #print 'Transaction.create 1', split.account.name, split.account.account_type, split.split_type, split.account_amount, split.profile_amount
+                processed_splits.append(split)
+
+            tot_debits = 0
+            tot_credits = 0
+            for x in t_debits:
+                tot_debits += x.profile_amount
+            for x in t_credits:
+                tot_credits += x.profile_amount
+
+            #print 'Transaction.create 2: tot_debits, tot_credits ', tot_debits, tot_credits
+
+            if tot_credits != tot_debits:
+                foreign_credit_splits = [x for x in t_credits if x.account.is_foreign() is True]
+                if len(foreign_credit_splits) > 0:
+                    xe_income_acc = splits[0].account.group.book.currency_xe_income_acc
+                    xe_expense_acc = splits[0].account.group.book.currency_xe_expense_acc
+                    if tot_credits > tot_debits:
+                        xcgh_split = Split.create(tot_credits - tot_debits, xe_income_acc, 'CREDIT')
+                    else:
+                        xcgh_split = Split.create(tot_credits - tot_debits, xe_expense_acc, 'DEBIT')
+                    instance.add_split(xcgh_split)
+                    processed_splits.append(xcgh_split)
+                else:
+                    raise KorovaError("Imbalanced Transaction")
+        except KorovaError:
+            for ps in processed_splits:
+                ps.account.get_split_processor().unlink(ps)
+            raise
 
         instance.save()
         return instance
 
     def add_split(self, split):
-        if split.transaction is not None:
-            raise KorovaError("Split is already in a Transaction")
+        #print 'add_split profile_amount 0' , split.profile_amount
         split.transaction = self
-        split.account.get_split_processor().process(split)
+        rv = split.account.get_split_processor().process(split)
+        #print 'add_split profile_amount 1' , split.profile_amount
+        return rv
 
 
 class Split(models.Model):
     account_amount = models.DecimalField(max_digits=18, decimal_places=6)
     profile_amount = models.DecimalField(max_digits=18, decimal_places=6)
-    local_cost = models.DecimalField(max_digits=18, decimal_places=6)
     account = models.ForeignKey(Account, null=True, related_name='splits')
     split_type = EnumField(values=('DEBIT', 'CREDIT'))
     is_linked = models.BooleanField()
@@ -371,7 +446,6 @@ class Split(models.Model):
         instance.split_type = split_type
         instance.is_linked = False
         instance.profile_amount = DECIMAL_ZERO
-        instance.local_cost = DECIMAL_ZERO
         return instance
 
     # this is for transaction validation purposes
