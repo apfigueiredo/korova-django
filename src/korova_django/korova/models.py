@@ -5,6 +5,7 @@ from django.utils import timezone
 from django.db import transaction
 
 
+
 DECIMAL_ZERO = Decimal(0)
 QUANTA = Decimal(10) ** (-6)
 
@@ -102,28 +103,42 @@ class Currency(models.Model):
     def __cmp__(self, other):
         return cmp(self.code, other.code)
 
+    def __unicode__(self):
+        return self.code
+
 
 class Profile(models.Model):
     accounting_mode = EnumField(values=('LIFO', 'FIFO'))  # for now, FIFO is assumed
     default_currency = models.ForeignKey(Currency)
     name = models.CharField(max_length=300)
+    exchange_rate_provider = None
 
     @classmethod
     def create(cls, default_currency, name, accounting_mode='FIFO'):
-        return cls.objects.create(default_currency=default_currency, accounting_mode=accounting_mode, name=name)
+        from currencies import XERateProvider
+        instance = cls.objects.create(default_currency=default_currency,
+                                      accounting_mode=accounting_mode, name=name)
+        instance.set_exchange_rate_provider(XERateProvider())
+        return instance
+
+    def set_exchange_rate_provider(self, provider):
+        self.exchange_rate_provider = provider
 
     def create_book(self, start, end=None):
         return Book.objects.create(start=start, end=end, profile=self)
+
+    def __unicode__(self):
+        return self.name
 
 
 class Book(models.Model):
     start = models.DateField()
     end = models.DateField(null=True)
     profile = models.ForeignKey(Profile, related_name='books')
-    initial_balances_acc = models.ForeignKey('Account', null=True, related_name='initial_balances_acc')
-    profit_loss_acc = models.ForeignKey('Account', null=True, related_name='profit_loss_acc')
-    currency_xe_income_acc = models.ForeignKey('Account', null=True, related_name='currency_xe_income_acc')
-    currency_xe_expense_acc = models.ForeignKey('Account', null=True, related_name='currency_xe_expense_acc')
+    initial_balances_acc = models.ForeignKey('Account', null=True, blank=True, related_name='initial_balances_acc')
+    profit_loss_acc = models.ForeignKey('Account', null=True, blank=True, related_name='profit_loss_acc')
+    currency_xe_income_acc = models.ForeignKey('Account', null=True, blank=True, related_name='currency_xe_income_acc')
+    currency_xe_expense_acc = models.ForeignKey('Account', null=True, blank=True, related_name='currency_xe_expense_acc')
 
     def create_top_level_group(self, name, code):
         return Group.objects.create(code=code, name=name, book=self, parent=None)
@@ -136,6 +151,9 @@ class Book(models.Model):
 
             raise KorovaError("Book is not ready for transactions because one of its main accounts is null")
 
+    def __unicode__(self):
+        return "%s: (%s to %s)" % (self.profile, self.start, self.end)
+
 
 class Group(models.Model):
     code = models.CharField(max_length=30, unique=True)
@@ -144,7 +162,9 @@ class Group(models.Model):
     parent = models.ForeignKey('self', null=True, blank=True, related_name='children')
 
     def create_child(self, name, code):
-        return Group.objects.create(code=code, name=name, book=self.book, parent=self)
+        child = Group.objects.create(code=code, name=name, book=self.book, parent=self)
+        child.save()
+        return child
 
     def create_account(self, code, name, currency, account_type):
         acc = Account.create(code=code, name=name, profile=self.book.profile,
@@ -153,11 +173,14 @@ class Group(models.Model):
         acc.save()
         return acc
 
+    def __unicode__(self):
+        return "%s - %s" % (self.code, self.name)
+
 
 class Account(models.Model):
     code = models.CharField(max_length=30, unique=True)
     name = models.CharField(max_length=100)
-    imbalance = models.DecimalField(max_digits=18, decimal_places=6)
+    imbalance = models.DecimalField(max_digits=18, decimal_places=6, default=DECIMAL_ZERO)
     group = models.ForeignKey(Group, related_name='accounts', null=True)
     currency = models.ForeignKey(Currency)
     account_type = EnumField(values=(
@@ -298,6 +321,9 @@ class Account(models.Model):
 
         return account_balance, profile_balance
 
+    def __unicode__(self):
+        return "%s - %s" % (self.code, self.name)
+
 
 class Pocket(models.Model):
     account_amount = models.DecimalField(max_digits=18, decimal_places=6)   # Creation amount in the account's currency
@@ -321,7 +347,6 @@ class Transaction(models.Model):
     @classmethod
     @transaction.atomic
     def create(cls, date, description, splits):
-        from currencies import RateProvider
         instance = cls()
         instance.transaction_date = date
         instance.creation_date = timezone.now()
@@ -356,13 +381,16 @@ class Transaction(models.Model):
             if split.profile_amount == DECIMAL_ZERO:  # increase
                 #print 'entrei'
                 if split.account.is_foreign():
-                    xg_rate = RateProvider.get_exchange_rate(split.account.currency,
-                                                             split.account.profile.default_currency)
-                    split.profile_amount = xg_rate * split.account_amount
+                    xchg_rate_provider = split.account.profile.exchange_rate_provider
+                    xchg_rate = xchg_rate_provider.get_exchange_rate(split.account.currency,
+                                                                     split.account.profile.default_currency)
+                    #print xg_rate
+                    split.profile_amount = xchg_rate * split.account_amount
                 else:
                     split.profile_amount = split.account_amount
-                l_tot_credits += split.profile_amount
+            l_tot_credits += split.profile_amount
 
+        #print l_tot_credits
 
         # And now the debits. Locals are easy.
         l_local_debits = 0
@@ -406,10 +434,14 @@ class Transaction(models.Model):
                 if len(foreign_credit_splits) > 0:
                     xe_income_acc = splits[0].account.group.book.currency_xe_income_acc
                     xe_expense_acc = splits[0].account.group.book.currency_xe_expense_acc
+                    #print 'xe_income_acc: ', xe_income_acc.code, xe_income_acc.name
+                    #print 'xe_expense_acc: ', xe_expense_acc.code, xe_expense_acc.name
                     if tot_credits > tot_debits:
-                        xcgh_split = Split.create(tot_credits - tot_debits, xe_income_acc, 'CREDIT')
-                    else:
+                        # We deducted from a foreign account more than we've got in a local account
+                        # this is an expense
                         xcgh_split = Split.create(tot_credits - tot_debits, xe_expense_acc, 'DEBIT')
+                    else:
+                        xcgh_split = Split.create(tot_debits - tot_credits, xe_income_acc, 'CREDIT')
                     instance.add_split(xcgh_split)
                     processed_splits.append(xcgh_split)
                 else:
@@ -425,6 +457,7 @@ class Transaction(models.Model):
     def add_split(self, split):
         #print 'add_split profile_amount 0' , split.profile_amount
         split.transaction = self
+        #print split.account, split.account_amount, split.profile_amount, split.split_type
         rv = split.account.get_split_processor().process(split)
         #print 'add_split profile_amount 1' , split.profile_amount
         return rv

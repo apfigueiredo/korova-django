@@ -4,7 +4,7 @@ from django.db.utils import ProgrammingError
 from suds.client import Client
 from bs4 import BeautifulSoup
 from urllib2 import Request, urlopen
-
+import logging
 
 currencies = {}
 
@@ -35,7 +35,7 @@ class XERateProvider(object):
     def get_exchange_rate(self, rate_from, rate_to):
 
         headers = {'User-Agent' : self.user_agent}
-        request = Request(self.xe_url_template %(rate_from, rate_to),None, headers)
+        request = Request(self.xe_url_template %(rate_from.code, rate_to.code),None, headers)
 
         soup = BeautifulSoup(urlopen(request))
 
@@ -49,11 +49,7 @@ class WSRateProvider(object):
 
     def __init__(self):
         self.ws_client = Client(self.ws_url)
+        logging.getLogger('suds.client').setLevel(logging.CRITICAL)
 
     def get_exchange_rate(self, rate_from, rate_to):
-        return self.ws_client.service.ConversionRate(rate_from, rate_to)
-
-# TODO: Rate Provider should be configurable
-# For now, we will using the XE rate provider.
-
-RateProvider = XERateProvider()
+        return self.ws_client.service.ConversionRate(rate_from.code, rate_to.code)

@@ -10,6 +10,7 @@ https://docs.djangoproject.com/en/1.6/ref/settings/
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 import os
+import sys
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 
 
@@ -60,6 +61,8 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': 'korova',
+        #'ENGINE' : 'django.db.backends.sqlite3',
+        #'NAME' : '/tmp/korova.sqlite3',
         'USER': 'korova',
         'PASSWORD': 'korova123',
         'HOST': '127.0.0.1',
@@ -67,6 +70,17 @@ DATABASES = {
     }
 }
 
+# TODO: DISABLE IN PRODUCTION!
+PASSWORD_HASHERS = (
+    'django.contrib.auth.hashers.MD5PasswordHasher',
+)
+
+#if 'test' in sys.argv or 'test_coverage' in sys.argv: #Covers regular testing and django-coverage
+#    DATABASES['default']['OPTIONS'] = {'init_command': 'SET storage_engine=MEMORY'}
+#    #from django.core import management
+#    DATABASES['default']['ENGINE'] = 'django.db.backends.sqlite3'
+#    DATABASES['default']['NAME'] = '/tmp/korova.sqlite3'
+#    #management.call_command('syncdb', interactive=False)
 
 # Internationalization
 # https://docs.djangoproject.com/en/1.6/topics/i18n/
