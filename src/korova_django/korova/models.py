@@ -452,14 +452,17 @@ class Transaction(models.Model):
             raise
 
         instance.save()
+        # reparent all the splits and save
+
+        for s in splits:
+            s.transaction = instance
+            s.save()
+
         return instance
 
     def add_split(self, split):
-        #print 'add_split profile_amount 0' , split.profile_amount
         split.transaction = self
-        #print split.account, split.account_amount, split.profile_amount, split.split_type
         rv = split.account.get_split_processor().process(split)
-        #print 'add_split profile_amount 1' , split.profile_amount
         return rv
 
 
@@ -468,7 +471,7 @@ class Split(models.Model):
     profile_amount = models.DecimalField(max_digits=18, decimal_places=6)
     account = models.ForeignKey(Account, null=True, related_name='splits')
     split_type = EnumField(values=('DEBIT', 'CREDIT'))
-    is_linked = models.BooleanField()
+    is_linked = models.BooleanField(default=False)
     transaction = models.ForeignKey(Transaction, related_name='splits', null=True)
 
     @classmethod
@@ -488,3 +491,9 @@ class Split(models.Model):
             return 1
         else:
             return -1
+
+    def save(self, *args, **kwargs):
+        if self.transaction is None:
+            raise KorovaError("cannot save a split without transaction")
+        print 'in Split.save(): self.transaction =', self.transaction
+        return super(Split, self).save(*args, **kwargs)

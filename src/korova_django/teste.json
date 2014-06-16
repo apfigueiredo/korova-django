@@ -1,0 +1,18 @@
+{
+    "splits": [
+        {
+            "account_amount": "100.000000",
+            "profile_amount": "100.000000",
+            "account": 2,
+            "split_type": "CREDIT"
+        },
+        {
+            "account_amount": "100.000000",
+            "profile_amount": "100.000000",
+            "account": 1,
+            "split_type": "DEBIT"
+        }
+    ],
+    "description": "Iniciais",
+    "creation_date": "2014-06-16T05:32:25Z"
+}
