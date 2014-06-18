@@ -39,6 +39,7 @@ INSTALLED_APPS = (
     'django.contrib.staticfiles',
     'rest_framework',
     'korova',
+    'main'
 )
 
 MIDDLEWARE_CLASSES = (
