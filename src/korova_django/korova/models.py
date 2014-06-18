@@ -3,11 +3,13 @@ from exceptions import KorovaError
 from decimal import Decimal
 from django.utils import timezone
 from django.db import transaction
-
+from django.contrib.auth.models import User
+from mixins import KorovaEntity
 
 
 DECIMAL_ZERO = Decimal(0)
 QUANTA = Decimal(10) ** (-6)
+
 
 # TODO: REFACTOR THIS WHOLE THING TO USE ACCOUNT NATURE
 class SplitProcessor(object):
@@ -29,18 +31,11 @@ class SplitProcessor(object):
             self.unlink(f_split)
 
         if split.split_type == self.increase_operation:
-        #     assert split.profile_amount is not None, \
-        #         "process: profile_amount should be present for %s operation in account %s" \
-        #         % (self.increase_operation, self.account)
-             return_amount = self.account.increase_amount(split.account_amount, split.profile_amount)
+            return_amount = self.account.increase_amount(split.account_amount, split.profile_amount)
         elif split.split_type == self.decrease_operation:
-        #     assert split.profile_amount is None, \
-        #         "process: profile_amount should not be present for %s operation in account %s" \
-        #         % (self.decrease_operation, self.account)
-             return_amount = self.account.deduct_amount(split.account_amount)
+            return_amount = self.account.deduct_amount(split.account_amount)
 
         split.profile_amount = return_amount
-        #print split.account.name, split.account.account_type
         split.is_linked  = True
         split.save()
 
@@ -112,6 +107,7 @@ class Profile(models.Model):
     default_currency = models.ForeignKey(Currency)
     name = models.CharField(max_length=300)
     exchange_rate_provider = None
+    user = models.OneToOneField(User)
 
     @classmethod
     def create(cls, default_currency, name, accounting_mode='FIFO'):
@@ -131,7 +127,7 @@ class Profile(models.Model):
         return self.name
 
 
-class Book(models.Model):
+class Book(KorovaEntity):
     start = models.DateField()
     end = models.DateField(null=True)
     profile = models.ForeignKey(Profile, related_name='books')
@@ -155,9 +151,7 @@ class Book(models.Model):
         return "%s: (%s to %s)" % (self.profile, self.start, self.end)
 
 
-class Group(models.Model):
-    code = models.CharField(max_length=30, unique=True)
-    name = models.CharField(max_length=100)
+class Group(KorovaEntity):
     book = models.ForeignKey(Book, related_name='groups')
     parent = models.ForeignKey('self', null=True, blank=True, related_name='children')
 
@@ -177,9 +171,7 @@ class Group(models.Model):
         return "%s - %s" % (self.code, self.name)
 
 
-class Account(models.Model):
-    code = models.CharField(max_length=30, unique=True)
-    name = models.CharField(max_length=100)
+class Account(KorovaEntity):
     imbalance = models.DecimalField(max_digits=18, decimal_places=6, default=DECIMAL_ZERO)
     group = models.ForeignKey(Group, related_name='accounts', null=True)
     currency = models.ForeignKey(Currency)

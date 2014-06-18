@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.contrib.auth.admin import UserAdmin
 
 # Register your models here.
 from django.contrib import admin
@@ -9,6 +10,7 @@ admin.site.register(Book)
 admin.site.register(Group)
 admin.site.register(Account)
 admin.site.register(Pocket)
+
 
 class SplitInline(admin.TabularInline):
     model = Split
@@ -24,3 +26,16 @@ class TransactionAdmin(admin.ModelAdmin):
 
 admin.site.register(Transaction, TransactionAdmin)
 #admin.site.register(Split)
+
+
+class ProfileInline(admin.StackedInline):
+    model = Profile
+    can_delete = False
+    verbose_name_plural = 'profile'
+
+
+class UserAdmin(UserAdmin):
+    inlines = ProfileInline
+
+admin.site.unregister(User)
+admin.site.register(User, UserAdmin)
