@@ -58,3 +58,6 @@ docs/_build/
 # PyCharm project directory
 .idea
 
+# Komodo stuff
+.komodotools
+korova.komodoproject
