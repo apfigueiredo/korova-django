@@ -120,8 +120,8 @@ class Profile(models.Model):
     def set_exchange_rate_provider(self, provider):
         self.exchange_rate_provider = provider
 
-    def create_book(self, start, end=None):
-        return Book.objects.create(start=start, end=end, profile=self)
+    def create_book(self, code, name, start, end=None):
+        return Book.objects.create(start=start, code=code, name=name, end=end, profile=self)
 
     def __unicode__(self):
         return self.name

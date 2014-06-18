@@ -1,0 +1,47 @@
+body {
+    display: block;
+    width: 600px;
+    margin-right: auto;
+    margin-left: auto;
+    padding: 20px 30px 20px 30px;
+    font: 14px 'Helvetica Neue', Helvetica, Arial, FreeSans, sans-serif;
+    color: #888;
+    text-shadow: 1px 1px 1px #FFF;
+    /* border:1px solid #DADADA;    */
+}
+
+.header {
+    padding-top: 100px;
+}
+
+.spanlabel {
+    float: left;
+    width: 80px;
+    text-align: right;
+    padding-right: 10px;
+    margin-top: 10px;
+    color: #888;
+}
+
+.loginfield {
+    border: 1px solid #DADADA;
+    color: #888;
+    height: 24px;
+    margin-bottom: 16px;
+    margin-right: 6px;
+    margin-top: 2px;
+    outline: 0 none;
+    padding: 3px 3px 3px 5px;
+    width: 70%;
+}
+
+label.infield {
+    cursor: text !important;
+}
+
+#submit {
+    background: #E48F8F;
+    border: none;
+    padding: 10px 25px 10px 25px;
+    color: #FFF;
+}

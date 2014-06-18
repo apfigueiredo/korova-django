@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head lang="en">
+    <meta charset="UTF-8">
+    <title>Korova Login Page</title>
+    <link href="/static/login.css" rel="stylesheet" type="text/css" />
+</head>
+<body>
+    <div id="header" class="header">
+        <h1>Please enter your credentials to login:</h1>
+    </div>
+    <div>
+        <form action="/perform_login/" method="post">
+            {% csrf_token %}
+            <label>
+                <span class="spanlabel">Username :</span>
+                <input type="text" name="username" id="username" class="loginfield" placeholder="Enter your username"/>
+            </label>
+            <label>
+                <span class="spanlabel">Password :</span>
+                <input type="password" name="password"  id="Password" class="loginfield" placeholder="Enter your password"/>
+            </label>
+            <label>
+                <span class="spanlabel">&nbsp;</span>
+                <input id="submit" type="submit" class="button" value="Login" />
+            </label>
+        </form>
+    </div>
+</body>
+</html>
