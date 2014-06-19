@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head lang="en">
+    <meta charset="UTF-8">
+    <link href="/static/base.css" rel="stylesheet" type="text/css" />
+    <!-- add the jQuery script -->
+    <script type="text/javascript" src="static/scripts/jquery-1.11.0.min.js"></script>	
+    <!-- add the jQWidgets framework -->
+    <script type="text/javascript" src="static/jqwidgets/jqxcore.js"></script>
+    <!-- add one or more widgets -->
+    <script type="text/javascript" src="static/jqwidgets/jqxbuttons.js"></script>
+    <!-- add one of the jQWidgets styles -->
+    <link rel="stylesheet" href="static/jqwidgets/styles/jqx.darkblue.css" type="text/css" />       
+    <title>{% block title %}Korova{% endblock title %}</title>
+</head>
+<body>
+<div id="top">
+{% block top %}
+<form action="/perform_logout/" method="post">
+    {% csrf_token %}
+    
+    <label>
+        <input type="submit" value="Logout" />
+    </label>
+</form>    
+    
+{% endblock top %}
+</div>
+
+<div id="sidebar">
+    <ul>
+        {% block sidebar_default %}
+            <li class="sidebar-item"><a href="/">Home</a></li>
+            <li class="sidebar-item"><a href="/list_accounts">Manage Accounts</a></li>
+            <li class="sidebar-item"><a href="/manage_groups">Manage Groups</a></li>
+        {% endblock sidebar_default %}
+        {% block sidebar %}
+        {% endblock sidebar %}
+    </ul>    
+</div>
+<div id="content">
+    {% block content %} {% endblock content %}
+</div>
+
+<div id="footer">
+    {% block footer %} {% endblock footer %}
+</div>
+</body>
+</html>

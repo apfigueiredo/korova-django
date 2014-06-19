@@ -1,22 +1,8 @@
-<!DOCTYPE html>
-<html>
-<head lang="en">
-    <meta charset="UTF-8">
-    <title>Korova Home Screen</title>
-</head>
-<body>
-<h1>You are logged in as {{ user }}</h1>
+{% extends "website/base.html" %}
 
-<p>
-    <a href="/list_accounts"> List Accounts </a>
-</p>
-
-<form action="/perform_logout/" method="post">
-    {% csrf_token %}
     
-    <label>
-        <input type="submit" value="Logout" />
-    </label>
-</form>
-</body>
-</html>
+    
+{% block content %}
+<h1> Welcome to Korova!</h1>
+
+{% endblock content %}

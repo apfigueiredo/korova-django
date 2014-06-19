@@ -2,6 +2,7 @@ from django.db import models
 from exceptions import KorovaError
 from decimal import Decimal
 from django.utils import timezone
+from django.core.urlresolvers import reverse
 from django.db import transaction
 from django.contrib.auth.models import User
 from mixins import KorovaEntity
@@ -170,6 +171,8 @@ class Group(KorovaEntity):
     def __unicode__(self):
         return "%s - %s" % (self.code, self.name)
 
+    def get_absolute_url(self):
+        return reverse('group-detail', kwargs={'pk' : self.pk})
 
 class Account(KorovaEntity):
     imbalance = models.DecimalField(max_digits=18, decimal_places=6, default=DECIMAL_ZERO)
