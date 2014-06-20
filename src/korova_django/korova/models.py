@@ -174,6 +174,9 @@ class Group(KorovaEntity):
     def get_absolute_url(self):
         return reverse('group-detail', kwargs={'pk' : self.pk})
 
+    def __cmp__(self, other):
+        return cmp(self.code, other.code)
+
 class Account(KorovaEntity):
     imbalance = models.DecimalField(max_digits=18, decimal_places=6, default=DECIMAL_ZERO)
     group = models.ForeignKey(Group, related_name='accounts', null=True)

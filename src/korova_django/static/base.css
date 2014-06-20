@@ -67,3 +67,7 @@ ul {
     
 }
 
+.content-link {
+    float: left;
+    padding: 10px;
+}

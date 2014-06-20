@@ -1,0 +1,17 @@
+{% extends "website/base.html" %}    
+
+{% block content %}
+    
+<div>
+    <a href="/account/form">Add</a>
+</div>
+
+<h1>Account List</h1>
+
+{% autoescape off %}
+
+{{ book_html }}
+
+{% endautoescape %}
+
+{% endblock content %}
