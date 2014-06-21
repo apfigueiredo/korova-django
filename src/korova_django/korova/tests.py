@@ -4,6 +4,7 @@ from korova.currencies import *
 from django.utils import timezone
 from django.db import IntegrityError
 import random
+from django.contrib.auth.models import User
 
 brl = currencies['BRL']
 usd = currencies['USD']
@@ -26,9 +27,10 @@ class KorovaModelTests(TestCase):
 
     @classmethod
     def setUpClass(cls):
+        user = User.objects.create_user('test', 'test@test.com', 'abc123')
         Profile.objects.all().delete()
-        cls.profile = Profile.create(brl, "Test Profile")
-        cls.book = cls.profile.create_book(start=timezone.now())
+        cls.profile = Profile.create(brl, "Test Profile", user)
+        cls.book = cls.profile.create_book(code="T01", name="T01", start=timezone.now())
         cls.group = cls.book.create_top_level_group(name='Test Group', code='G01')
         xe_income_acc = cls.group.create_account('R01', 'exchange income', brl, 'INCOME')
         xe_expense_acc = cls.group.create_account('R02', 'exchange expense', brl, 'EXPENSE')
@@ -38,7 +40,9 @@ class KorovaModelTests(TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        u = cls.profile.user
         cls.profile.delete()
+        u.delete()
 
     def test_duplicate_currencies(self):
         old_entries = Currency.objects.filter(code='XYZ')

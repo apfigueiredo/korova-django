@@ -1,0 +1,124 @@
+{% extends "website/base.html" %}    
+
+{% block head %}
+    
+ 
+    
+<style type="text/css">
+table.gridtable {
+	font-family: verdana,arial,sans-serif;
+	font-size:11px;
+	color:#333333;
+	border-width: 1px;
+	border-color: #666666;
+	border-collapse: collapse;
+}
+table.gridtable th {
+	border-width: 1px;
+	padding: 8px;
+	border-style: solid;
+	border-color: #666666;
+	background-color: #ccccff;
+}
+table.gridtable td {
+	border-width: 1px;
+	padding: 8px;
+	border-style: solid;
+	border-color: #666666;
+	background-color: #ffffff;
+}
+</style>    
+
+
+<script>
+   $(document).ready(function() {
+    
+    
+      $(".datepicker" ).datepicker({
+        changeMonth: true,
+        changeYear: true,
+        yearRange: "1900:2020",
+        dateFormat: "yy-mm-dd"
+      });
+      
+   });
+</script>  
+
+{% endblock head %}    
+
+{% block content_linkbar %}
+    <a class="korova-content-link" href="/transaction/form">Add</a>
+{% endblock content_linkbar %}
+
+{% block content %}
+    
+
+<form action="/transaction/" method="post">{% csrf_token %}
+{{ transaction_form.as_p }}
+
+<table class="gridtable">
+
+<thead><tr><th>Credit</th><th>Debit</th></tr></thead>
+<tr><td>
+<table>
+{{ credit_formset.management_form }}    
+{% for form in credit_formset.forms %}
+  {% if forloop.first %}
+  <thead><tr>
+    {% for field in form.visible_fields %}
+    <th>{{ field.label|capfirst }}</th>
+    {% endfor %}
+  </tr></thead>
+  {% endif %}
+  <tr class="{% cycle row1,row2 %}">
+  {% for field in form.visible_fields %}
+    <td>
+    {# Include the hidden fields in the form #}
+    {% if forloop.first %}
+      {% for hidden in form.hidden_fields %}
+      {{ hidden }}
+      {% endfor %}
+    {% endif %}
+      {{ field.errors.as_ul }}
+      {{ field }}
+    </td>
+  {% endfor %}
+  </tr>
+{% endfor %}
+</table>    
+</td>
+<td>
+<table>
+{{ debit_formset.management_form }}        
+{% for form in debit_formset.forms %}
+  {% if forloop.first %}
+  <thead><tr>
+    {% for field in form.visible_fields %}
+    <th>{{ field.label|capfirst }}</th>
+    {% endfor %}
+  </tr></thead>
+  {% endif %}
+  <tr class="{% cycle row1,row2 %}">
+  {% for field in form.visible_fields %}
+    <td>
+    {# Include the hidden fields in the form #}
+    {% if forloop.first %}
+      {% for hidden in form.hidden_fields %}
+      {{ hidden }}
+      {% endfor %}
+    {% endif %}
+      {{ field.errors.as_ul }}
+      {{ field }}
+    </td>
+  {% endfor %}
+  </tr>
+{% endfor %}
+</table>
+</td>
+</tr>
+</table>
+<input type="submit" value="Submit" />
+</form>
+ 
+
+{% endblock content %}

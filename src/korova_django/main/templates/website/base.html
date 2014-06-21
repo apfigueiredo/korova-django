@@ -2,16 +2,15 @@
 <html>
 <head lang="en">
     <meta charset="UTF-8">
+        
+    <link rel="stylesheet" href="/static/css/ui-lightness/jquery-ui-1.10.4.css">
+    <script type="text/javascript" src="/static/scripts/jquery-1.10.2.min.js"></script>	
+    <script src="/static/scripts/jquery-ui-1.10.4.js"></script>
+ 
     <link href="/static/base.css" rel="stylesheet" type="text/css" />
-    <!-- add the jQuery script -->
-    <script type="text/javascript" src="static/scripts/jquery-1.11.0.min.js"></script>	
-    <!-- add the jQWidgets framework -->
-    <script type="text/javascript" src="static/jqwidgets/jqxcore.js"></script>
-    <!-- add one or more widgets -->
-    <script type="text/javascript" src="static/jqwidgets/jqxbuttons.js"></script>
-    <!-- add one of the jQWidgets styles -->
-    <link rel="stylesheet" href="static/jqwidgets/styles/jqx.darkblue.css" type="text/css" />       
+    
     <title>{% block title %}Korova{% endblock title %}</title>
+    {% block head %} {% endblock head %}
 </head>
 <body>
 <div id="top">
@@ -32,14 +31,22 @@
         {% block sidebar_default %}
             <li class="sidebar-item"><a href="/">Home</a></li>
             <li class="sidebar-item"><a href="/account">Manage Accounts</a></li>
-            <li class="sidebar-item"><a href="/manage_groups">Manage Groups</a></li>
+            <li class="sidebar-item"><a href="/group">Manage Groups</a></li>
+            <li class="sidebar-item"><a href="/transaction">Manage Transactions</a></li>
         {% endblock sidebar_default %}
         {% block sidebar %}
         {% endblock sidebar %}
     </ul>    
 </div>
 <div id="content">
-    {% block content %} {% endblock content %}
+    <div id="korova-content-linkbar">
+        {% block content_linkbar %}
+        {% endblock content_linkbar %}
+    </div>
+    <div id="korova-content-main">
+        {% block content %}
+        {% endblock content %}
+    </div>
 </div>
 
 <div id="footer">

@@ -111,10 +111,10 @@ class Profile(models.Model):
     user = models.OneToOneField(User)
 
     @classmethod
-    def create(cls, default_currency, name, accounting_mode='FIFO'):
+    def create(cls, default_currency, name, user, accounting_mode='FIFO'):
         from currencies import XERateProvider
         instance = cls.objects.create(default_currency=default_currency,
-                                      accounting_mode=accounting_mode, name=name)
+                                      accounting_mode=accounting_mode, name=name, user=user)
         instance.set_exchange_rate_provider(XERateProvider())
         return instance
 
@@ -207,6 +207,13 @@ class Account(KorovaEntity):
     }
 
     split_processor = None
+
+    def __init__(self, *args, **kwargs):
+        super(Account, self).__init__(*args, **kwargs)
+        try:
+            self.profile = self.group.book.profile
+        except AttributeError:
+            pass
 
     def get_nature(self):
         return self.account_natures[str(self.account_type)]
@@ -376,7 +383,7 @@ class Transaction(models.Model):
         for split in t_credits:
             #print 'split.profile_amount =', split.profile_amount, ' split.profile_amount == DECIMAL_ZERO:', split.profile_amount == DECIMAL_ZERO, split.account.account_type
             #if split.profile_amount == DECIMAL_ZERO and split.operation_sign() == 1:  # increase
-            if split.profile_amount == DECIMAL_ZERO:  # increase
+            if split.profile_amount == DECIMAL_ZERO or split.profile_amount is None:  # increase
                 #print 'entrei'
                 if split.account.is_foreign():
                     xchg_rate_provider = split.account.profile.exchange_rate_provider
@@ -472,14 +479,19 @@ class Split(models.Model):
     is_linked = models.BooleanField(default=False)
     transaction = models.ForeignKey(Transaction, related_name='splits', null=True)
 
+    def __unicode__(self):
+        return u"Split[acc<%s>,type<%s>,trans<%s>,acc_amt<%s>,prf_amt<%s>]" % \
+            (unicode(self.account), self.split_type, unicode(self.transaction), unicode(self.account_amount),
+             unicode(self.profile_amount))
+
     @classmethod
-    def create(cls, amount, account, split_type):
+    def create(cls, amount, account, split_type, profile_amount=DECIMAL_ZERO):
         instance = Split()
         instance.account_amount = amount
         instance.account = account
         instance.split_type = split_type
         instance.is_linked = False
-        instance.profile_amount = DECIMAL_ZERO
+        instance.profile_amount = profile_amount
         return instance
 
     # this is for transaction validation purposes
