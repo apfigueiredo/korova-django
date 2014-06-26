@@ -1,0 +1,101 @@
+ 1        | Ativo
+ 1.01     | Circulante
+ 1.01.002 | Conta Itaú
+ 1.01.001 | Carteira
+ 1.01.003 | Cheques em Circulação
+ 1.01.004 | Reserva em Espécie
+ 1.02     | Investimentos
+ 1.02.001 | Poupança Itaú
+ 1.04     | Contas a Receber
+ 1.04.001 | Contas a Receber
+ 1.05     | Empréstimos
+ 1.05.001 | ORGA - A reembolsar
+ 1.05.002 | Ernaldo - A receber
+ 1.05.003 | Empréstimos Gerais
+ 1.05.004 | Rodrigo - A receber
+ 1.03     | Moeda Estrangeira
+ 1.03.001 | Dólares
+ 1.03.002 | Euros
+ 1.06     | Outros
+ 1.06.001 | FGTS
+ 2        | Passivo
+ 2.01     | Cartões
+ 2.01.002 | Cartão Itaú Visa
+ 2.01.001 | Cartão Itaú Master Gold
+ 2.02     | Contas a Pagar
+ 2.02.001 | Fornecedores
+ 2.02.002 | Empréstimos Pessoais
+ 2.02.003 | Cheques em Transito
+ 2.02.004 | Adiantamento ORGA
+ 3        | Receita
+ 3.01     | Regulares
+ 3.01.001 | Salario
+ 3.01.002 | Juros s/ Investimento
+ 3.01.003 | Depósito de FGTS
+ 3.02     | Extra
+ 3.02.001 | Freelas
+ 3.02.002 | Reconciliações
+ 3.02.003 | Presentes
+ 3.02.004 | Restituição IRRF
+ 3.02.005 | Recuperação Moedas
+ 3.02.006 | Vendas
+ 3.02.007 | Retorno Rodrigo
+ 3.02.008 | Receita com câmbio
+ 4        | Despesa
+ 4.01     | Moradia
+ 4.01.001 | MOR - Aluguel/Condomínio
+ 4.01.003 | MOR - Mercadorias
+ 4.01.004 | MOR - Serviços
+ 4.01.002 | MOR - Contas
+ 4.02     | Tecnologia e Comunicações
+ 4.02.001 | INF - Compras
+ 4.02.002 | INF - Serviços
+ 4.02.003 | INF - Celular
+ 4.03     | Cuidado Pessoal
+ 4.03.001 | CP - Roupas
+ 4.03.002 | CP - Estética
+ 4.03.003 | CP - Saúde
+ 4.03.004 | CP - Academia
+ 4.03.005 | CP - Compras
+ 4.03.006 | CP - Serviços
+ 4.04     | Educação e Aperfeiçoamento
+ 4.04.001 | EDU - Livros e Revistas
+ 4.04.002 | EDU - Eventos
+ 4.04.003 | EDU - Serviços
+ 4.04.004 | EDU - Compras
+ 4.05     | Automóvel
+ 4.05.001 | AUTO - Manutenção
+ 4.05.002 | AUTO - Impostos
+ 4.05.003 | AUTO - Seguro
+ 4.05.004 | AUTO - Lavagem
+ 4.05.005 | AUTO - Multas
+ 4.06     | Lazer
+ 4.06.001 | LAZ - Saídas; Bar, Restaurante
+ 4.06.002 | LAZ - Saídas; Cinema, Teatro
+ 4.06.003 | LAZ - Saídas; Trilhas, Passeios
+ 4.06.004 | LAZ - Viagens
+ 4.07     | Tributos e Tarifas
+ 4.07.001 | TAR - Multas, Juros e Mora
+ 4.07.002 | TAR - Tarifas Manutenção Bancária
+ 4.07.003 | TAR - Seguros
+ 4.07.004 | TAR - Tributos
+ 4.07.008 | TAR - Anuidades Cartão
+ 4.08     | Outros
+ 4.08.001 | OUT - Reconciliação
+ 4.08.002 | OUT - Custas Judiciais
+ 4.08.003 | OUT - Despesa com câmbio
+ 4.09     | Operativos
+ 4.09.001 | OP - Compras
+ 4.09.002 | OP - Alimentação
+ 4.09.003 | OP - Transporte
+ 4.09.004 | OP - Serviços
+ 4.10     | Ajuda
+ 4.10.001 | AJU - Família
+ 4.10.002 | AJU - Amigos
+ 4.10.004 | AJU - Presentes
+ 4.10.003 | AJU - Rodrigo
+ 4.10.005 | AJU - Esmolas
+ 5        | Líquido
+ 5.01     | Patrimônio Líquido
+ 5.01.001 | Saldos Iniciais
+ 5.01.002 | Lucros / Prejuízos Acumulados

@@ -110,6 +110,14 @@ class Profile(models.Model):
     exchange_rate_provider = None
     user = models.OneToOneField(User)
 
+    def __init__(self, *args, **kwargs):
+        from currencies import XERateProvider
+        super(Profile, self).__init__(*args, **kwargs)
+        try:
+            self.set_exchange_rate_provider(XERateProvider())
+        except AttributeError:
+            pass
+
     @classmethod
     def create(cls, default_currency, name, user, accounting_mode='FIFO'):
         from currencies import XERateProvider

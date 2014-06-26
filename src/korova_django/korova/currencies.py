@@ -5,6 +5,7 @@ from suds.client import Client
 from bs4 import BeautifulSoup
 from urllib2 import Request, urlopen
 import logging
+from decimal import Decimal
 
 currencies = {}
 
@@ -33,6 +34,7 @@ class XERateProvider(object):
     xe_url_template = 'http://www.xe.com/currencyconverter/convert/?Amount=1&From=%s&To=%s'
 
     def get_exchange_rate(self, rate_from, rate_to):
+        from models import QUANTA
 
         headers = {'User-Agent' : self.user_agent}
         request = Request(self.xe_url_template %(rate_from.code, rate_to.code),None, headers)
@@ -41,7 +43,7 @@ class XERateProvider(object):
 
         # this is cryptic, I know... just reverse engineering on the xe HTML page
         str_rate = soup.find_all(class_='uccResUnit')[0].find_all('td')[0].text.split()[3]
-        return float(str_rate)
+        return Decimal(float(str_rate)).quantize(QUANTA)
 
 class WSRateProvider(object):
 

@@ -102,7 +102,8 @@ class AccountView(KorovaEntityView):
             html_result += "<ul>" + self.build_group_tree(subgroup, original) + "</ul>"
         accounts_html = ""
         for account in group.accounts.all():
-            accounts_html += "<li>%s - %s - <a href=\"/account/%d/delete_object\">delete</a></li>" % (account.code, account.name, account.pk)
+            accounts_html += "<li>%s - %s - %s %s    <a href=\"/account/%d/delete_object\">delete</a></li>" % \
+                             (account.code, account.name, account.get_balances()[0], account.currency.code, account.pk)
         if accounts_html:
             html_result += "<ul>" + accounts_html + "</ul>"
         html_result += "</li>"
