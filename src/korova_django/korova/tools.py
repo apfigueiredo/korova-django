@@ -1,7 +1,7 @@
 __author__ = 'aloysio'
 
 from models import *
-from currencies import currencies
+from currencies import currencies, initialize_currencies
 from datetime import datetime
 from django.contrib.auth.models import User
 import sys
@@ -9,6 +9,7 @@ import os
 
 
 def create_default_data():
+    initialize_currencies()
     brl = currencies['BRL']
     usd = currencies['USD']
     eur = currencies['EUR']

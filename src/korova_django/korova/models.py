@@ -513,5 +513,4 @@ class Split(models.Model):
     def save(self, *args, **kwargs):
         if self.transaction is None:
             raise KorovaError("cannot save a split without transaction")
-        print 'in Split.save(): self.transaction =', self.transaction
         return super(Split, self).save(*args, **kwargs)
