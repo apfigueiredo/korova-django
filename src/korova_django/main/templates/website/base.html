@@ -9,12 +9,23 @@
  
     <link href="/static/base.css" rel="stylesheet" type="text/css" />
     
+{% if not active_book %}
+    <script>
+        
+        $(document).ready(function() {
+            $(".switchable").on("click", function(e) { e.preventDefault(); });
+            $(".switchable").addClass("disabled-link");
+        });
+    </script>
+{% endif %}    
+    
     <title>{% block title %}Korova{% endblock title %}</title>
     {% block head %} {% endblock head %}
 </head>
 <body>
 <div id="top">
 {% block top %}
+<p>
 <form action="/perform_logout/" method="post">
     {% csrf_token %}
     
@@ -22,7 +33,8 @@
         <input type="submit" value="Logout" />
     </label>
 </form>    
-    
+</p>
+
 {% endblock top %}
 </div>
 
@@ -30,9 +42,9 @@
     <ul>
         {% block sidebar_default %}
             <li class="sidebar-item"><a href="/">Home</a></li>
-            <li class="sidebar-item"><a href="/account">Manage Accounts</a></li>
-            <li class="sidebar-item"><a href="/group">Manage Groups</a></li>
-            <li class="sidebar-item"><a href="/transaction">Manage Transactions</a></li>
+            <li class="sidebar-item"><a class="switchable" href="/account">Manage Accounts</a></li>
+            <li class="sidebar-item"><a class="switchable" href="/group">Manage Groups</a></li>
+            <li class="sidebar-item"><a class="switchable" href="/transaction">Manage Transactions</a></li>
         {% endblock sidebar_default %}
         {% block sidebar %}
         {% endblock sidebar %}

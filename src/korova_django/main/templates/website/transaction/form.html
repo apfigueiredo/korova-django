@@ -31,7 +31,53 @@ table.gridtable td {
 
 
 <script>
+    
+    
+    addCreditSplit = function() {
+        console.log("adding row");
+        total = parseInt($("#id_credit-TOTAL_FORMS").val());
+        $("#id_credit-TOTAL_FORMS").val(total+1);
+        rowHTML = "";
+        rowHTML += "<tr>";
+        rowHTML += "<td><input type=\"button\" value=\"-\" class=\"row-remove-button\" onclick=\"$(this).parent().parent().remove();\"/></td>";
+        rowHTML += "<td>";
+        rowHTML += "<input id=\"id_credit-"+total+"-split_type\" name=\"credit-"+total+"-split_type\" type=\"hidden\" value=\"CREDIT\" />";
+        rowHTML += "<input id=\"id_credit-"+total+"-id\" name=\"credit-"+total+"-id\" type=\"hidden\" />";
+        rowHTML += "<input id=\"id_credit-"+total+"-transaction\" name=\"credit-"+total+"-transaction\" type=\"hidden\" />";
+        rowHTML += "<input class=\"account-cell\" id=\"id_credit-"+total+"-account\" name=\"credit-"+total+"-account\" size=\"30\">";
+        rowHTML += "</td>";
+        rowHTML += "<td><input id=\"id_credit-"+total+"-account_amount\" name=\"credit-"+total+"-account_amount\" size=\"10\" /></td>";
+        rowHTML += "<td><input id=\"id_credit-"+total+"-profile_amount\" name=\"credit-"+total+"-profile_amount\" size=\"10\" /></td>";
+        rowHTML += "</tr>"
+        
+        $('#credit_table').find('tbody:last').append(rowHTML);
+       
+    };
+    
+    addDebitSplit = function() {
+        console.log("adding debit row");
+        total = parseInt($("#id_debit-TOTAL_FORMS").val());
+        $("#id_debit-TOTAL_FORMS").val(total+1);
+        rowHTML = "";
+        rowHTML += "<tr>";
+        rowHTML += "<td><input type=\"button\" value=\"-\" class=\"row-remove-button\" onclick=\"$(this).parent().parent().remove();\"/></td>";
+        rowHTML += "<td>";
+        rowHTML += "<input id=\"id_debit-"+total+"-split_type\" name=\"debit-"+total+"-split_type\" type=\"hidden\" value=\"DEBIT\" />";
+        rowHTML += "<input id=\"id_debit-"+total+"-id\" name=\"debit-"+total+"-id\" type=\"hidden\" />";
+        rowHTML += "<input id=\"id_debit-"+total+"-transaction\" name=\"debit-"+total+"-transaction\" type=\"hidden\" />";
+        rowHTML += "<input class=\"account-cell\" id=\"id_debit-"+total+"-account\" name=\"debit-"+total+"-account\" size=\"30\">";
+        rowHTML += "</td>";
+        rowHTML += "<td><input id=\"id_debit-"+total+"-account_amount\" name=\"debit-"+total+"-account_amount\" size=\"10\" /></td>";
+        rowHTML += "<td><input id=\"id_debit-"+total+"-profile_amount\" name=\"debit-"+total+"-profile_amount\" size=\"10\" /></td>";
+        rowHTML += "</tr>"
+        
+        $('#debit_table').find('tbody:last').append(rowHTML);
+       
+    };
+    
+    
    $(document).ready(function() {
+    console.log("in ready");
     
     
       $(".datepicker" ).datepicker({
@@ -41,6 +87,69 @@ table.gridtable td {
         dateFormat: "yy-mm-dd"
       });
       
+      
+/* build account cache */
+    result = $.ajax({
+        url : '/api/accounts',
+        type : 'GET',
+        dataType : 'json',
+        crossDomain : false,
+        async : false,
+        cache : false,
+        contentType : "application/json",
+        success : function(result) {
+                console.log("success for GET in /api/accounts");
+        },
+        error : function(result) {
+                console.log("error for GET in /api/accounts ");
+        }
+    }).responseText;
+    
+    data = JSON.parse(result);
+    //console.log(result);
+    
+    
+    document.account_ids = new Array();
+    document.account_map = {}
+    $.each(data, function(index, value) {
+        identifier = value.code + ' - ' + value.name;
+        document.account_ids.push(identifier);
+        document.account_map[identifier] = value.id;
+    });
+    //$.map(data, function(element) {return element.code + ' - ' + element.name});
+    console.log(document.account_ids);
+    console.log(JSON.stringify(document.account_map));
+    
+    addCreditSplit();
+    addDebitSplit();
+     $(".account-cell").autocomplete({source: document.account_ids});
+    
+    /*
+    $(".row-remove-button").click(function() {
+        console.log("removing!");
+        row = $(this).parent().parent().remove();
+    });
+   */
+   
+   
+    $("#add-credit-button").click(function() {
+        addCreditSplit();
+         $(".account-cell").autocomplete({source: document.account_ids});
+    });
+   
+    $("#add-debit-button").click(function() {
+        addDebitSplit();
+         $(".account-cell").autocomplete({source: document.account_ids});
+    });
+    
+    $("#transaction_form").on("submit", function(e) {
+        $(".account-cell").each(function(index) {
+            old_val = $(this).val();
+            $(this).val(document.account_map[old_val]);            
+        });
+        //$(this).submit();
+    });
+   
    });
 </script>  
 
@@ -53,66 +162,42 @@ table.gridtable td {
 {% block content %}
     
 
-<form action="/transaction/" method="post">{% csrf_token %}
+<form id="transaction_form" action="/transaction/" method="post">{% csrf_token %}
 {{ transaction_form.as_p }}
 
 <table class="gridtable">
 
-<thead><tr><th>Credit</th><th>Debit</th></tr></thead>
+<thead><tr>
+<th><input type="button" id="add-credit-button" value="+"/> Credit</th>
+<th><input type="button" id="add-debit-button" value="+"/> Debit</th>
+</tr></thead>
 <tr><td>
-<table>
+<table id="credit_table">
 {{ credit_formset.management_form }}    
-{% for form in credit_formset.forms %}
-  {% if forloop.first %}
+
   <thead><tr>
     {% for field in form.visible_fields %}
     <th>{{ field.label|capfirst }}</th>
     {% endfor %}
   </tr></thead>
-  {% endif %}
-  <tr class="{% cycle row1,row2 %}">
-  {% for field in form.visible_fields %}
-    <td>
-    {# Include the hidden fields in the form #}
-    {% if forloop.first %}
-      {% for hidden in form.hidden_fields %}
-      {{ hidden }}
-      {% endfor %}
-    {% endif %}
-      {{ field.errors.as_ul }}
-      {{ field }}
-    </td>
-  {% endfor %}
-  </tr>
-{% endfor %}
+
+
+  <tbody>
+
+  </tbody>
+
 </table>    
 </td>
 <td>
-<table>
+<table id="debit_table">
 {{ debit_formset.management_form }}        
-{% for form in debit_formset.forms %}
-  {% if forloop.first %}
   <thead><tr>
     {% for field in form.visible_fields %}
     <th>{{ field.label|capfirst }}</th>
     {% endfor %}
   </tr></thead>
-  {% endif %}
-  <tr class="{% cycle row1,row2 %}">
-  {% for field in form.visible_fields %}
-    <td>
-    {# Include the hidden fields in the form #}
-    {% if forloop.first %}
-      {% for hidden in form.hidden_fields %}
-      {{ hidden }}
-      {% endfor %}
-    {% endif %}
-      {{ field.errors.as_ul }}
-      {{ field }}
-    </td>
-  {% endfor %}
-  </tr>
-{% endfor %}
+  <tbody>
+  </tbody>
 </table>
 </td>
 </tr>

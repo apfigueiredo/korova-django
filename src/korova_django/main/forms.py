@@ -1,6 +1,6 @@
 __author__ = 'aloysio'
 
-from django.forms import ModelForm
+from django.forms import ModelForm, Form
 from django import forms
 from korova.models import Account, Group, Transaction, Split
 

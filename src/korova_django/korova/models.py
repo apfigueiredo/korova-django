@@ -109,6 +109,7 @@ class Profile(models.Model):
     name = models.CharField(max_length=300)
     exchange_rate_provider = None
     user = models.OneToOneField(User)
+    active_book = None
 
     def __init__(self, *args, **kwargs):
         from currencies import XERateProvider
@@ -158,6 +159,17 @@ class Book(KorovaEntity):
 
     def __unicode__(self):
         return "%s: (%s to %s)" % (self.profile, self.start, self.end)
+
+    @classmethod
+    def get_active_book(cls, request):
+        try:
+            book_id = request.session['book_id']
+            book = cls.objects.get(pk=book_id)
+            return book
+        except (KeyError, cls.DoesNotExist):
+            pass
+
+        return None
 
 
 class Group(KorovaEntity):

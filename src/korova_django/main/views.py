@@ -12,16 +12,46 @@ from .forms import AccountForm, GroupForm, TransactionForm, make_credit_split_fo
 from korova.models import Group, Account, Transaction, Split
 from django.forms.formsets import formset_factory
 from django.forms.models import inlineformset_factory
+from korova.models import Book
+from django import forms
 
 
+class KorovaRequestContext(RequestContext):
+    def __init__(self, *args, **kwargs):
+        super(KorovaRequestContext, self).__init__(*args, **kwargs)
+        d=self.dicts[-1]
+        request = args[0]
+        d['active_book'] = Book.get_active_book(request)
 
+
+class IndexView(View):
+
+    def build_book_choice_form(self, request):
+        class BookChoiceForm(forms.Form):
+            book = forms.ModelChoiceField(Book.objects.filter(profile=request.user.profile))
+
+        return BookChoiceForm
+
+    def get(self, request):
+        template = loader.get_template('website/index.html')
+        user = request.user
+        book_choice_form = self.build_book_choice_form(request)()
+        context = KorovaRequestContext(request, {'user' : user, 'book_choice_form': book_choice_form})
+        return HttpResponse(template.render(context))
+
+    def post(self, request):
+        book_choice_form = self.build_book_choice_form(request)(request.POST)
+        book_choice_form.is_valid()
+        book = book_choice_form.cleaned_data['book']
+        request.session['book_id'] = book.pk
+        return redirect('/')
 
 
 @login_required(login_url='/login/')
 def index(request):
     template = loader.get_template('website/index.html')
     user = request.user
-    context = RequestContext(request, {'user' : user})
+    context = KorovaRequestContext(request, {'user' : user})
     return HttpResponse(template.render(context))
 
 def perform_login(request):
@@ -122,18 +152,17 @@ class AccountView(KorovaEntityView):
     def show_form(self, request, pk=None):
         profile = request.user.profile
         form = AccountForm()
-        form.fields['group'].queryset = Group.objects.filter(book=profile.books.all()[0]).order_by('code')
-        context = RequestContext(request, {'form' : form})
+        form.fields['group'].queryset = Group.objects.filter(book=Book.get_active_book(request)).order_by('code')
+        context = KorovaRequestContext(request, {'form' : form})
         return HttpResponse(self.form_template.render(context))
 
     def list_objects(self, request):
-        profile = request.user.profile
-        book = profile.books.all()[0]
+        book = Book.get_active_book(request)
         book_html = "<ul>"
         for group in book.groups.filter(parent=None):
             book_html += self.build_group_tree(group)
         book_html += "</ul>"
-        context = RequestContext(request, {'book_html' : book_html})
+        context = KorovaRequestContext(request, {'book_html' : book_html})
         return HttpResponse(self.list_template.render(context))
 
 
@@ -154,15 +183,15 @@ class GroupView(KorovaEntityView):
         print 'is_valid: ' + str(form.is_valid())
         new_group = Group(**form.cleaned_data)
         profile = request.user.profile
-        new_group.book = profile.books.all()[0]
+        new_group.book = Book.get_active_book(request)
         new_group.save()
         return redirect('/group')
 
     def show_form(self, request, pk=None):
         profile = request.user.profile
         form = GroupForm()
-        form.fields['parent'].queryset = Group.objects.filter(book=profile.books.all()[0]).order_by('code')
-        context = RequestContext(request, {'form' : form})
+        form.fields['parent'].queryset = Group.objects.filter(book=Book.get_active_book(request)).order_by('code')
+        context = KorovaRequestContext(request, {'form' : form})
         return HttpResponse(self.form_template.render(context))
 
     def delete_object(self, request, pk, action):
@@ -172,12 +201,12 @@ class GroupView(KorovaEntityView):
 
     def list_objects(self, request):
         profile = request.user.profile
-        book = profile.books.all()[0]
+        book = Book.get_active_book(request)
         book_html = "<ul>"
         for group in book.groups.filter(parent=None):
             book_html += self.build_group_tree(group)
         book_html += "</ul>"
-        context = RequestContext(request, {'book_html' : book_html})
+        context = KorovaRequestContext(request, {'book_html' : book_html})
         return HttpResponse(self.list_template.render(context))
 
 
@@ -186,12 +215,11 @@ class TransactionView(KorovaEntityView):
     form_template = loader.get_template("website/transaction/form.html")
 
     def list_objects(self, request):
-        context = RequestContext(request, {})
+        context = KorovaRequestContext(request, {})
         return HttpResponse(self.list_template.render(context))
 
     def add_object(self, request):
-        profile = request.user.profile
-        book = profile.books.all()[0]
+        book = Book.get_active_book(request)
         _CreditFormSet = inlineformset_factory(Transaction, Split,
                                                form=make_credit_split_form(book),
                                                can_delete=False,
@@ -240,20 +268,19 @@ class TransactionView(KorovaEntityView):
         return redirect('/transaction')
 
     def show_form(self, request, pk=None):
-        profile = request.user.profile
-        book = profile.books.all()[0]
+        book = Book.get_active_book(request)
         transaction_form = TransactionForm()
         _CreditFormSet = inlineformset_factory(Transaction, Split,
                                                form=make_credit_split_form(book),
                                                can_delete=False,
-                                               extra=6)
+                                               extra=0)
         _DebitFormSet = inlineformset_factory(Transaction, Split,
                                               form=make_debit_split_form(book),
                                               can_delete=False,
-                                              extra=6)
+                                              extra=0)
         credit_formset = _CreditFormSet(prefix='credit')
         debit_formset = _DebitFormSet(prefix='debit')
-        context = RequestContext(request, {'transaction_form': transaction_form,
+        context = KorovaRequestContext(request, {'transaction_form': transaction_form,
                                            'credit_formset': credit_formset,
                                            'debit_formset': debit_formset})
         return HttpResponse(self.form_template.render(context))

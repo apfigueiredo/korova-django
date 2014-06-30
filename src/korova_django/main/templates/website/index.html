@@ -5,4 +5,17 @@
 {% block content %}
 <h1> Welcome to Korova!</h1>
 
+{% if active_book %}
+<p>Your current active book is <span style="font-weight: bold">{{ active_book }}</span></p>
+{% else %}
+<p>There is no active book currently set.</p>
+{% endif %}
+
+Please choose a book to work with: <br />
+
+<form action="/" method="post">{% csrf_token %}
+{{ book_choice_form.as_p }}
+<input type="submit" value="Submit" />
+</form>
+
 {% endblock content %}
